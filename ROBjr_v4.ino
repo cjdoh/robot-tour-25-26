@@ -52,7 +52,7 @@ double straightHeading = 0;
     long encEnd;                            //encoder endpoint for move
 
 // General variables:
-  const long print_time = 100;                // Time in ms for printing updates to the console
+  const long print_time = 1000;                // Time in ms for printing updates to the console
   int buttonState = 0;                      // variable for reading the pushbutton status
   int lastbuttonState = 0;                  // variable for reading the last pushbutton status
   int buttonSpeedState = 0;                      // variable for reading the pushbutton speed status
@@ -67,9 +67,11 @@ double straightHeading = 0;
 // PID for going straight
 //PID vars that we will be using
 double Set_heading, motorA_offset=motor_A_speed;
-double Kp=1.9, Ki=1.0 , Kd=0;
+double Kp=1.0, Ki=1.0 , Kd=0;
 //Specify the links and initial tuning parameters
-PID myPID(&heading, &motorA_offset, &Set_heading, Kp, Ki, Kd, DIRECT);
+double blankZero = 0;
+double myError = 0;
+PID myPID(&blankZero, &motorA_offset, &myError, Kp, Ki, Kd, DIRECT);
 
 
 
@@ -117,8 +119,7 @@ void loop() {
     delay(2000);                 //time to get finger off button
     Run_Motors = 1;
     up_compass();
-    start_heading = heading;
-    straightHeading = start_heading;
+    straightHeading = heading;
     motors.setSpeedA(motor_A_speed);
     motors.setSpeedB(motor_B_speed);
   }  
@@ -133,153 +134,18 @@ void loop() {
     movestraightF(22.0+9.0);
     /* ---------------- DO NOT TOUCH ----------------- */
     
-    // state @ caltech
-    left();
-    forward();
-    forward();
-    forward();
-    right();
-    forward();
-    right();
-    forward();
-    left();
-    forward();
-    left();
-    forward();
-    backward();
-    right();
-    forward();
-    right();
-    forward();
-    forward();
-    backward();
-    left();
-    backward();
-    left();
-    backward();
-    forward();
-
-    /*
-    //mr sandts challenge
-    left();
-    forward();
-    right();
-    forward();
-    forward();
-    right();
-    forward();
-    forward();
-    left();
-    backward();
-    backward();
-    forward();
-    right();
-    forward();
-    left();
-    backward();
-    forward();
-    left();
-    forward();
-    forward();
-    backward();
-    right();
-    forward();
-    right();
-    forward();
-    left();
-    forward();
-    forward();
-    left();
-    forward();
-    */
-
-    //movestraightF(100);
-
-    /* 
-    // antelope valley maze
-    forward();
-    right();
-    forward();
-    forward();
-    left();
-    forward();
-    right();
-    forward();
-    left();
-    forward();
-    left();
-    forward();
-    right();
-    forward();
-    left();
-    forward();
-    forward();
-    backward();
-    right();
-    backward();
-    */
-
-    /*
-    forward();
-    right();
-    forward();
-    left();
-    forward();
-    forward();
-    left();
-    forward();
-    right();
-    forward();
-    right();
-    forward();
-    */
-
-    /*
-    // the box
-    forward();
-    forward();
-    forward();
-    forward();
-    right();
-    forward();
-    forward();
-    forward();
-    left();
-    backward();
-    backward();
-    backward();
-    backward();
-    left();
-    forward();
-    forward();
-    forward();
-    right();
-    */
-    
-    /*
-    //this is the complex one
-    forward();
-    left();
-    forward();
-    right();
-    forward();
-    right();
-    forward();
-    left();
-    forward();
-    backward();
-    right();
-    forward();
-    forward();
-    left();
-    forward();
-    left();
-    forward();
-    backward();
-    right();
-    backward();
-    backward();
-    */
+  // run primitives here
+  forward();
+  left();
+  forward();
+  left();
+  forward();
+  left();
+  forward();
+  left();
+  forward();
+  left();
+  
 
 
     /* ---------------- DO NOT TOUCH ----------------- */
@@ -335,8 +201,8 @@ void left() {
     goalHeading -= 360.0;
   }
 
-  motors.setSpeedA(50);
-  motors.setSpeedB(50);
+  motors.setSpeedA(70);
+  motors.setSpeedB(70);
   motors.forwardA();
   motors.backwardB();
 
@@ -366,7 +232,7 @@ void movestraightF(double distance) {
 
     // Check to see if you are moving or if you need to start moving
       if (Im_Moving_forward == 0) {
-        // Start Moving
+        // Start Moving 
         // Make robot drive forward
         myPID.SetMode(1);
         motors.forward();
@@ -501,7 +367,7 @@ void hit_breaks(){
 double read_compass() {
   double currCompass = 0.0;
   JY901.receiveSerialData();
-  /*
+  /*x
   while (currCompass == 0.0) {
     while (Serial1.available()) 
     {
@@ -526,6 +392,12 @@ void up_compass(){
   }
   */
   heading = JY901.getYaw();
+  myError = Set_heading - heading;
+  if (myError > 180)
+    myError -= 360;
+  else if (myError < -180)
+    myError += 360;
+
   //delay(50);
 }
 
