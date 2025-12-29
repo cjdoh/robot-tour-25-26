@@ -1,112 +1,116 @@
-#include <L298NX2.h>
+//#include <L298NX2.h>
+#include <SparkFun_TB6612.h>
 #include <Wire.h>
-//#include "JY901.h"
+//#include "JY901.h"/Users/jeremiahlaing/Documents/Arduino/libraries/SparkFun_TB6612FNG_Arduino_Library-master/src/SparkFun_TB6612.h
 #include <PID_v1.h>
 #include "JY901_Serial.h"
 
-double goalHeading = 0;
-double currentHeading = 0;
-double straightHeading = 0;
+// ---- Set pin numbers: ----
+const int buttonPin = 53;                 // the number of the pushbutton pin
 
-// Set pin numbers:
-  const int buttonPin = 53;                 // the number of the pushbutton pin
-  const int buttonSpeedPin = 50;                 // the number of the pushbutton pin
-// Key Parameters
+// ---- Key Parameters ----
     //const int encLend = 10*1920;             // pulses for left motor - not used 
-    const double travelDist = -50;           // travel distance in CM  
-    const double ENCperCM = 58.3727699;                //Number of encoder counts per cm // Chris's value: 59.00727699 // Isaac's value: 59.6107603336
-    int motor_A_speed = 70;                // motor A speed (left Motor)
-    int motor_B_speed = 70;                // motor B speed (right Motor)
-    int run_forward_cnt = 0;               // howmany times we have run forward
-    int run_backward_cnt = 0;
-    const double turnAngle = 80.0;
+const double travelDist = -50;           // travel distance in CM  
+const double ENCperCM = 58.3727699;                //Number of encoder counts per cm // Chris's value: 59.00727699 // Isaac's value: 59.6107603336
+int motor_speed = 70;                // motor A speed (left Motor)
+int run_forward_cnt = 0;               // howmany times we have run forward
+int run_backward_cnt = 0;
+const double turnAngle = 80.0;
 
+const double blockSize = 50.0; // Size of one of side of a "block" on the grid (centimeters)
 
-//Motor Setup
+// ---- Motor Setup ----
   // Left Motor
-    const unsigned int EN_A = 2; 
-    const unsigned int IN1_A = 29; 
-    const unsigned int IN2_A = 27; 
+    const unsigned int PWMA = 2; 
+    const unsigned int AIN2 = 3; 
+    const unsigned int AIN1 = 4; 
   // Right Motor
-    const unsigned int EN_B = 3; 
-    const unsigned int IN1_B = 25; 
-    const unsigned int IN2_B = 23; 
-  // Motor Varibles
+    const unsigned int BIN1 = 5; 
+    const unsigned int BIN2 = 6; 
+    const unsigned int PWMB = 7; 
 
-
+// ---- Motor Variables ---- 
   // Initialize both motors
-    L298NX2 motors(EN_A, IN1_A, IN2_A, EN_B, IN1_B, IN2_B);
-// Encoders Setup
-  // Left Motor Encoder
-    const byte encoderLpinA = 21;            //A pin -> the interrupt pin 0
-    const byte encoderLpinB = 33;           //B pin -> the digital pin 3
-    byte encoderLPinALast;
-    long encLpulses;                        //the number of the pulses
-    boolean encLdir;                        //the rotation direction
-  // Right Motor Encoder
-    const byte encoderRpinA = 35;            //A pin -> the interrupt pin 0
-    const byte encoderRpinB = 20;           //B pin -> the digital pin 3
-    byte encoderRPinALast;
-    long encRpulses;                        //the number of the pulses
-    boolean encRdir;                        //the rotation direction
-    long encEnd;                            //encoder endpoint for move
+    Motor motorLeft(AIN1, AIN2, PWMA, 1, 0);
+    Motor motorRight(BIN1, BIN2, PWMB, 1, 0);
+  // Encoders Setup
+    // Left Motor Encoder
+      const byte encoderLpinA = 21;            // A pin -> the interrupt pin 0
+      const byte encoderLpinB = 33;           // B pin -> the digital pin 3
+      byte encoderLPinALast;
+      long encLpulses;                        // the number of the pulses
+      boolean encLdir;                        // the rotation direction
+    // Right Motor Encoder
+      const byte encoderRpinA = 35;            // A pin -> the interrupt pin 0
+      const byte encoderRpinB = 20;           // B pin -> the digital pin 3
+      byte encoderRPinALast;
+      long encRpulses;                        // the number of the pulses
+      boolean encRdir;                        // the rotation direction
+      long encEnd;                            // encoder endpoint for move
 
-// General variables:
-  const long print_time = 100;                // Time in ms for printing updates to the console
-  int buttonState = 0;                      // variable for reading the pushbutton status
-  int lastbuttonState = 0;                  // variable for reading the last pushbutton status
-  int buttonSpeedState = 0;                      // variable for reading the pushbutton speed status
-  int lastbuttonSpeedState = 0;                  // variable for reading the last pushbutton speed status
-  int Run_Motors = 0;               // If set to 1 the motors will drive forward for interval
-  int Im_Moving_forward = 0;                // If i'm actually moving forward
-  int Im_Moving_backward = 0;
-  unsigned long previousMillis = millis();         // will store last time Motor was run
-  double heading = 0;                        // Compass heading
-  double start_heading = 0;                        // Compass starting heading
+  // General variables:
+    const long printDebugCooldown = 1000;                // Minimum time (milliseconds) between printing updates to the console
+    int buttonState = 0;                      // Variable for reading the pushbutton status
+    int lastbuttonState = 0;                  // Variable for reading the last pushbutton status
+    int buttonSpeedState = 0;                      // Variable for reading the pushbutton speed status
+    int lastbuttonSpeedState = 0;                  // Variable for reading the last pushbutton speed status
+    
+    int isMovingFoward = false;                // TRUE if robot is moving foward
+    int isMovingBackward = false;               // TRUE if robot is backward
+    unsigned long previousMillis = millis();         // will store last time Motor was run
 
-// PID for going straight
-//PID vars that we will be using
-double Set_heading, motorA_offset=motor_A_speed;
-double Kp=1.9, Ki=1.0 , Kd=0;
-//Specify the links and initial tuning parameters
-PID myPID(&heading, &motorA_offset, &Set_heading, Kp, Ki, Kd, DIRECT);
+    double heading = 0;                        // Compass heading
+    double startHeading = 0;                        // Compass starting heading (when button is pressed)
+    double goalHeading = 0;                       // Heading the robot wants to be on
+    double straightHeading = 0;             // The heading the robot should be on to be moving straight
+
+    double currentHeading = 0;                // Temporary heading variable used while rotating
+    
+
+    bool beginPath = false;               // If set to TRUE, the set movement primitives will run
+
+// ---- PID (for going straight) ----
+  // PID variables
+    double motorA_offset=motor_speed;
+    double Kp=1.0, Ki=1.0 , Kd=0;
+  // Specify the links and initial tuning parameters
+    double blankZero = 0;
+    double myError = 0;
+  PID myPID(&blankZero, &motorA_offset, &myError, Kp, Ki, Kd, DIRECT);
 
 
 
 void setup() {
   // Setup Serial Output
     Serial.begin(115200);
+    
     // Wait for Serial Monitor to be opened
-      while (!Serial)
-      {
-        //do nothing
-      }
+    while (!Serial)
+    {
+      // do nothing
+    }
+
     Serial1.begin(9600);
-      /*
-        // Wait for Serial Monitor to be opened
-      while (!Serial1)
-      {
-        //do nothing
-      }
-      */
+
     JY901.attach(Serial1);
-  // initialize the pushbutton pin as an input:
+
+  // Initialize the pushbutton pin as an input:
     pinMode(buttonPin, INPUT);
-   // pinMode(buttonSpeedPin, INPUT);
-  // init encoders
+
+  // Initialize encoders
     encLpulses = 0;
     encRpulses = 0;
     EncodersInit();
     delay(500);
-    up_compass();
-    start_heading = heading;
+    update_heading();
+    startHeading = heading;
     myPID.SetOutputLimits(0, 255);
     myPID.SetSampleTime(100);
 }
 
 void loop() {
-  up_compass();
-  printSomeInfo();
+  update_heading();
+  printDebugInfo();
   // read the state of the pushbutton value:
   buttonState = digitalRead(buttonPin);
 
@@ -115,12 +119,10 @@ void loop() {
   // check if the pushbutton is pressed. If it is, the buttonState is HIGH:
   if (buttonState == HIGH && lastbuttonState == LOW) {
     delay(2000);                 //time to get finger off button
-    Run_Motors = 1;
-    up_compass();
-    start_heading = heading;
-    straightHeading = start_heading;
-    motors.setSpeedA(motor_A_speed);
-    motors.setSpeedB(motor_B_speed);
+
+    update_heading();
+    beginPath = true;
+    straightHeading = heading;
   }  
   lastbuttonState = buttonState;
   
@@ -128,197 +130,72 @@ void loop() {
   // Run Motors Forward
 
 
-  if (Run_Motors == 1) {
+  if (beginPath) {
     /* ---------------- DO NOT TOUCH ----------------- */
-    movestraightF(22.0+9.0);
+    moveStraightFoward(22.0+9.0);
     /* ---------------- DO NOT TOUCH ----------------- */
     
-    // state @ caltech
-    left();
-    forward();
-    forward();
-    forward();
-    right();
-    forward();
-    right();
-    forward();
-    left();
-    forward();
-    left();
-    forward();
-    backward();
-    right();
-    forward();
-    right();
-    forward();
-    forward();
-    backward();
-    left();
-    backward();
-    left();
-    backward();
-    forward();
-
-    /*
-    //mr sandts challenge
-    left();
-    forward();
-    right();
-    forward();
-    forward();
-    right();
-    forward();
-    forward();
-    left();
-    backward();
-    backward();
-    forward();
-    right();
-    forward();
-    left();
-    backward();
-    forward();
-    left();
-    forward();
-    forward();
-    backward();
-    right();
-    forward();
-    right();
-    forward();
-    left();
-    forward();
-    forward();
-    left();
-    forward();
-    */
-
-    //movestraightF(100);
-
-    /* 
-    // antelope valley maze
-    forward();
-    right();
-    forward();
-    forward();
-    left();
-    forward();
-    right();
-    forward();
-    left();
-    forward();
-    left();
-    forward();
-    right();
-    forward();
-    left();
-    forward();
-    forward();
-    backward();
-    right();
-    backward();
-    */
-
-    /*
-    forward();
-    right();
-    forward();
-    left();
-    forward();
-    forward();
-    left();
-    forward();
-    right();
-    forward();
-    right();
-    forward();
-    */
-
-    /*
-    // the box
-    forward();
-    forward();
-    forward();
-    forward();
-    right();
-    forward();
-    forward();
-    forward();
-    left();
-    backward();
-    backward();
-    backward();
-    backward();
-    left();
-    forward();
-    forward();
-    forward();
-    right();
-    */
-    
-    /*
-    //this is the complex one
-    forward();
-    left();
-    forward();
-    right();
-    forward();
-    right();
-    forward();
-    left();
-    forward();
-    backward();
-    right();
-    forward();
-    forward();
-    left();
-    forward();
-    left();
-    forward();
-    backward();
-    right();
-    backward();
-    backward();
-    */
+    // run primitives here
+    move(3);
+  
 
 
     /* ---------------- DO NOT TOUCH ----------------- */
-    movestraightB(-9.0);
+    moveStraightBackward(-9.0);
     /* ---------------- DO NOT TOUCH ----------------- */
 
-    Run_Motors = 0;
+    beginPath = false;
     
   }
 
 }
 
-void forward() {
-  movestraightF(50.0);
+// Move foward n blocks
+void foward(int blocks = 1){
+  move(blocks);
 }
 
-void backward() {
-  movestraightB(-50.0);
+// Move a half step foward
+void capture(){
+  moveStraightFoward(blockSize/2.0);
+}
+
+// Move backward n blocks
+void backward(int blocks = 1){
+  move(-blocks);
+}
+
+// Move a half step backward
+void release(){
+  moveStraightBackward(-blockSize/2.0);
+}
+
+// Move n blocks (positive for forward, negative for backward)
+void move(int blocks) {
+  double distanceCentimeters = (double)blocks * blockSize;
+  if (blocks >= 0){
+    moveStraightFoward(distanceCentimeters);
+  } else {
+    moveStraightBackward(-distanceCentimeters);
+  }  
 }
 
 void right() {
-  // up_compass();
+  // update_heading();
   currentHeading = read_compass();
   goalHeading = currentHeading - turnAngle;
   if (goalHeading < 0.0) {
     goalHeading += 360.0;
   }
 
-  motors.setSpeedA(50);
-  motors.backwardA();
-  motors.setSpeedB(50);
-  motors.forwardB();
+  right(motorLeft,motorRight,50);
 
   while ((currentHeading > goalHeading) || (abs(currentHeading-goalHeading) > turnAngle)) {
-    // up_compass();
+    // update_heading();
     currentHeading = read_compass();
-    printSomeInfo();
+    printDebugInfo();
   }
-  motors.stop();
+  hit_breaks();
   delay(200);
 
   straightHeading -= 90;
@@ -328,24 +205,21 @@ void right() {
 }
 
 void left() {
-  // up_compass();
+  // update_heading();
   currentHeading = read_compass();
   goalHeading = currentHeading + turnAngle;
   if (goalHeading > 360.0) {
     goalHeading -= 360.0;
   }
 
-  motors.setSpeedA(50);
-  motors.setSpeedB(50);
-  motors.forwardA();
-  motors.backwardB();
+  left(motorLeft,motorRight,50);
 
   while ((currentHeading < goalHeading) || (abs(currentHeading-goalHeading) > turnAngle)) {
-    // up_compass();
+    // update_heading();
     currentHeading = read_compass();
-    printSomeInfo();
+    printDebugInfo();
   }
-  motors.stop();
+  hit_breaks();
 
   straightHeading += 90;
   if (straightHeading > 180) {
@@ -356,82 +230,79 @@ void left() {
 
 }
 
-void movestraightF(double distance) {
-  up_compass();
+void moveStraightFoward(double distance) {
+  update_heading();
   encEnd = distance * ENCperCM;
   encLpulses = 0;
   encRpulses = 0;
-  Set_heading = straightHeading;
+  goalHeading = straightHeading;
   while (encRpulses < encEnd && encLpulses < encEnd) {
 
     // Check to see if you are moving or if you need to start moving
-      if (Im_Moving_forward == 0) {
-        // Start Moving
-        // Make robot drive forward
+      if (!isMovingFoward) {
+        // Start Moving 
         myPID.SetMode(1);
-        motors.forward();
-        Im_Moving_forward = 1;
+        forward(motorLeft, motorRight, motor_speed);
+        isMovingFoward = true;
       }
-      up_compass();
+      update_heading();
       KeepStraightF();
-      printSomeInfo();
+      printDebugInfo();
   }
-  // Stop moving and Clean up
+  // Stop moving
   hit_breaks();
-  motors.stop();
+  // Clean up
   myPID.SetMode(0);
-  Im_Moving_forward = 0;
-  Run_Motors = 0;
-  printSomeInfo();
+  isMovingFoward = false;
+  beginPath = 0;
+  printDebugInfo();
   delay(200);
 }
 
-void movestraightB(double distance) {
-  up_compass();
+void moveStraightBackward(double distance) {
+  update_heading();
   encEnd = distance * ENCperCM;
   encLpulses = 0;
   encRpulses = 0;
-  Set_heading = straightHeading;
+  goalHeading = straightHeading;
   while (encRpulses > encEnd && encLpulses > encEnd) {
 
     // Check to see if you are moving or if you need to start moving
-      if (Im_Moving_backward == 0) {
+      if (!isMovingBackward) {
         // Start Moving
         // Make robot drive backward
         myPID.SetMode(1);
-        motors.backward();
-        Im_Moving_backward = 1;
+        forward(motorLeft, motorRight, -motor_speed);
+        isMovingBackward = true;
       }
-      up_compass();
+      update_heading();
       KeepStraightB();
-      printSomeInfo();
+      printDebugInfo();
   }
-  // Stop moving and Clean up
+  // Stop moving
   hit_breaks();
-  motors.stop();
+  // Clean up
   myPID.SetMode(0);
-  Im_Moving_backward = 0;
-  Run_Motors = 0;
-  printSomeInfo();
+  isMovingBackward = false;
+  beginPath = 0;
+  printDebugInfo();
   delay(200);
 }
 
 void KeepStraightF() {
-  up_compass();
+  update_heading();
   myPID.Compute();
-  motors.setSpeedA(motorA_offset);
-  motors.setSpeedB(motor_B_speed);
-  motors.forward();
-  printSomeInfo();
+  motorLeft.drive(motorA_offset);
+  motorRight.drive(motor_speed);
+  printDebugInfo();
 }
 
 void KeepStraightB() {
-  up_compass();
+  update_heading();
   myPID.Compute();
-  motors.setSpeedB(motorA_offset);
-  motors.setSpeedA(motor_B_speed);
-  motors.backward();
-  printSomeInfo();
+  motorLeft.drive(-motor_speed);
+  motorRight.drive(-motorA_offset);
+  printDebugInfo();
 }
 
 void EncodersInit() {
@@ -481,56 +352,37 @@ void EncoderRCounter() {
   }
   encoderRPinALast = encRLstate;
 
-  if(!encRdir)  encRpulses--;
-  else  encRpulses++;
+  if(!encRdir) encRpulses--;
+  else encRpulses++;
 }
 
 
 void hit_breaks(){
 
-  motors.stop();
- // motors.setSpeed(90);
- // motors.backward();
- // delay(125);
- // motors.stop();
- // motors.setSpeedA(motor_A_speed);
- // motors.setSpeedB(motor_B_speed);
+  brake(motorLeft,motorRight);
 
 }
 
 double read_compass() {
-  double currCompass = 0.0;
   JY901.receiveSerialData();
-  /*
-  while (currCompass == 0.0) {
-    while (Serial1.available()) 
-    {
-      JY901.CopeSerialData(Serial1.read()); //Call JY901 data cope function
-      currCompass = ((double)JY901.stcAngle.Angle[2] / 32768 * 180) + 180.0;
-    }
-  }
-  */
-  currCompass = JY901.getYaw() + 180.0;
-  //delay(50);
-  return currCompass;
-  // return heading;
+
+  return JY901.getYaw() + 180.0;
 }
 
-void up_compass(){
+void update_heading(){
   JY901.receiveSerialData();
-  /*
-  while (Serial1.available()) 
-  {
-    JY901.CopeSerialData(Serial1.read()); //Call JY901 data cope function
-    heading = ((double)JY901.stcAngle.Angle[2] / 32768 * 180);
-  }
-  */
+
   heading = JY901.getYaw();
-  //delay(50);
+  myError = goalHeading - heading;
+  if (myError > 180)
+    myError -= 360;
+  else if (myError < -180)
+    myError += 360;
+
 }
 
-void printSomeInfo() {
-  if(millis() - previousMillis > print_time)
+void printDebugInfo() {
+  if(millis() - previousMillis > printDebugCooldown)
     {
     // Print motor info in Serial Monitor
       Serial.print("\033[0H\033[0J");       //Clear terminal window
@@ -539,26 +391,24 @@ void printSomeInfo() {
       Serial.print(Serial.availableForWrite());
       Serial.print("    Run Forward Count = ");
       Serial.println(run_forward_cnt);
-      Serial.print("PID Set Heading = ");
-      Serial.print(Set_heading);
+      Serial.print("    Goal Heading/PID Heading = ");
+      Serial.print(goalHeading);
       Serial.print("    Compass Heading = ");
       Serial.print(heading);
       Serial.print("    Compass Delta = ");
-      Serial.println(start_heading-heading);
+      Serial.println(startHeading-heading);
       Serial.print("Turn Compass Heading = ");
       Serial.print(currentHeading);
-      Serial.print("    Goal Heading = ");
-      Serial.println(goalHeading);
       Serial.print("    Straight Heading = ");
       Serial.println(straightHeading);
+      /*
       Serial.print("Left Motor Direction = ");
       Serial.print(motors.getDirectionA() ? "F" : "R");
       Serial.print(", Moving = ");
       Serial.print(motors.isMovingA() ? "YES" : "NO");
       Serial.print(", Speed = ");
       Serial.print(motors.getSpeedA());
-      Serial.print(", Setpoint = ");
-      Serial.println(motor_A_speed);
+      
       // Start New Line
       Serial.print("Right Motor direction = ");
       Serial.print(motors.getDirectionB() ? "F" : "R");
@@ -566,8 +416,11 @@ void printSomeInfo() {
       Serial.print(motors.isMovingB() ? "YES" : "NO");
       Serial.print(", Speed = ");
       Serial.print(motors.getSpeedB());
-      Serial.print(", Setpoint = ");
-      Serial.println(motor_B_speed);
+      */
+      Serial.print("Setpoint = ");
+      Serial.print(motor_speed);
+      Serial.print(", Motor A Offset = ");
+      Serial.println(motorA_offset);
       // Start new Line
       Serial.print("Left Encoder Count = ");
       Serial.print(encLpulses);
@@ -584,10 +437,6 @@ void printSomeInfo() {
       Serial.print(myPID.GetKd());
       Serial.print(" Mode = ");
       Serial.println(myPID.GetMode());
-      Serial.print("Motor A Offset = ");
-      Serial.println(motorA_offset);
       previousMillis = millis();                  // update the time we last printed
   }
-
-
 }
