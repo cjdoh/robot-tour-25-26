@@ -54,8 +54,8 @@ const double blockSize = 50.0; // Size of one of side of a "block" on the grid (
     int buttonSpeedState = 0;                      // Variable for reading the pushbutton speed status
     int lastbuttonSpeedState = 0;                  // Variable for reading the last pushbutton speed status
     
-    int isMovingFoward = false;                // TRUE if robot is moving foward
-    int isMovingBackward = false;               // TRUE if robot is backward
+    bool isMovingFoward = false;                // TRUE if robot is moving foward
+    bool isMovingBackward = false;               // TRUE if robot is backward
     unsigned long previousMillis = millis();         // will store last time Motor was run
 
     double heading = 0;                        // Compass heading
