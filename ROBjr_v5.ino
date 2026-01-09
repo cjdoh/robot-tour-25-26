@@ -21,13 +21,13 @@ const double blockSize = 50.0; // Size of one of side of a "block" on the grid (
 
 // ---- Motor Setup ----
   // Left Motor
-    const unsigned int PWMA = 2; 
-    const unsigned int AIN2 = 3; 
-    const unsigned int AIN1 = 4; 
+    const unsigned int PWMA = 3; 
+    const unsigned int AIN2 = 6; 
+    const unsigned int AIN1 = 5; 
   // Right Motor
-    const unsigned int BIN1 = 5; 
-    const unsigned int BIN2 = 6; 
-    const unsigned int PWMB = 7; 
+    const unsigned int BIN1 = 7; 
+    const unsigned int BIN2 = 8; 
+    const unsigned int PWMB = 9; 
 
 // ---- Motor Variables ---- 
   // Initialize both motors
@@ -35,14 +35,14 @@ const double blockSize = 50.0; // Size of one of side of a "block" on the grid (
     Motor motorRight(BIN1, BIN2, PWMB, 1, 0);
   // Encoders Setup
     // Left Motor Encoder
-      const byte encoderLpinA = 21;            // A pin -> the interrupt pin 0
-      const byte encoderLpinB = 33;           // B pin -> the digital pin 3
+      const byte encoderLpinA = A5;            // A pin -> the interrupt pin 0
+      const byte encoderLpinB = 11;           // B pin -> the digital pin 3
       byte encoderLPinALast;
       long encLpulses;                        // the number of the pulses
       boolean encLdir;                        // the rotation direction
     // Right Motor Encoder
-      const byte encoderRpinA = 35;            // A pin -> the interrupt pin 0
-      const byte encoderRpinB = 20;           // B pin -> the digital pin 3
+      const byte encoderRpinA = A4;            // A pin -> the interrupt pin 0
+      const byte encoderRpinB = 10;           // B pin -> the digital pin 3
       byte encoderRPinALast;
       long encRpulses;                        // the number of the pulses
       boolean encRdir;                        // the rotation direction
