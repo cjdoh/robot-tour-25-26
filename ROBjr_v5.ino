@@ -82,17 +82,19 @@ const double blockSize = 50.0; // Size of one of side of a "block" on the grid (
 
 void setup() {
   // Setup Serial Output
-    Serial.begin(115200);
+    //Serial.begin(115200);
     
     // Wait for Serial Monitor to be opened
+    /*
     while (!Serial)
     {
       // do nothing
     }
+    */
 
-    Serial1.begin(9600);
+    Serial.begin(9600);
 
-    JY901.attach(Serial1);
+    JY901.attach(Serial);
 
   // Initialize the pushbutton pin as an input:
     pinMode(buttonPin, INPUT);
@@ -131,7 +133,7 @@ void loop() {
 
 
   if (beginPath) {
-    Serial.println("running");
+    //Serial.println("running");
     motorLeft.drive(10,500);
     motorRight.drive(10,500);
     
@@ -390,58 +392,58 @@ void printDebugInfo() {
   if(millis() - previousMillis > printDebugCooldown)
     {
     // Print motor info in Serial Monitor
-      Serial.print("\033[0H\033[0J");       //Clear terminal window
+      //Serial.print("\033[0H\033[0J");       //Clear terminal window
       
-      Serial.print("Bytes Avalible = ");
-      Serial.print(Serial.availableForWrite());
-      Serial.print("    Run Forward Count = ");
-      Serial.println(run_forward_cnt);
-      Serial.print("    Goal Heading/PID Heading = ");
-      Serial.print(goalHeading);
-      Serial.print("    Compass Heading = ");
-      Serial.print(heading);
-      Serial.print("    Compass Delta = ");
-      Serial.println(startHeading-heading);
-      Serial.print("Turn Compass Heading = ");
-      Serial.print(currentHeading);
-      Serial.print("    Straight Heading = ");
-      Serial.println(straightHeading);
+      //Serial.print("Bytes Avalible = ");
+      //Serial.print(//Serial.availableForWrite());
+      //Serial.print("    Run Forward Count = ");
+      //Serial.println(run_forward_cnt);
+      //Serial.print("    Goal Heading/PID Heading = ");
+      //Serial.print(goalHeading);
+      //Serial.print("    Compass Heading = ");
+      //Serial.print(heading);
+      //Serial.print("    Compass Delta = ");
+      //Serial.println(startHeading-heading);
+      //Serial.print("Turn Compass Heading = ");
+      //Serial.print(currentHeading);
+      //Serial.print("    Straight Heading = ");
+      //Serial.println(straightHeading);
       /*
-      Serial.print("Left Motor Direction = ");
-      Serial.print(motors.getDirectionA() ? "F" : "R");
-      Serial.print(", Moving = ");
-      Serial.print(motors.isMovingA() ? "YES" : "NO");
-      Serial.print(", Speed = ");
-      Serial.print(motors.getSpeedA());
+      //Serial.print("Left Motor Direction = ");
+      //Serial.print(motors.getDirectionA() ? "F" : "R");
+      //Serial.print(", Moving = ");
+      //Serial.print(motors.isMovingA() ? "YES" : "NO");
+      //Serial.print(", Speed = ");
+      //Serial.print(motors.getSpeedA());
       
       // Start New Line
-      Serial.print("Right Motor direction = ");
-      Serial.print(motors.getDirectionB() ? "F" : "R");
-      Serial.print(", Moving = ");
-      Serial.print(motors.isMovingB() ? "YES" : "NO");
-      Serial.print(", Speed = ");
-      Serial.print(motors.getSpeedB());
+      //Serial.print("Right Motor direction = ");
+      //Serial.print(motors.getDirectionB() ? "F" : "R");
+      //Serial.print(", Moving = ");
+      //Serial.print(motors.isMovingB() ? "YES" : "NO");
+      //Serial.print(", Speed = ");
+      //Serial.print(motors.getSpeedB());
       */
-      Serial.print("Setpoint = ");
-      Serial.print(motor_speed);
-      Serial.print(", Motor A Offset = ");
-      Serial.println(motorA_offset);
+      //Serial.print("Setpoint = ");
+      //Serial.print(motor_speed);
+      //Serial.print(", Motor A Offset = ");
+      //Serial.println(motorA_offset);
       // Start new Line
-      Serial.print("Left Encoder Count = ");
-      Serial.print(encLpulses);
-      Serial.print("  Right Encoder Count = ");
-      Serial.print(encRpulses);
-      Serial.print("  Target = ");
-      Serial.println(encEnd);
+      //Serial.print("Left Encoder Count = ");
+      //Serial.print(encLpulses);
+      //Serial.print("  Right Encoder Count = ");
+      //Serial.print(encRpulses);
+      //Serial.print("  Target = ");
+      //Serial.println(encEnd);
      // Start New Line
-      Serial.print("Kp = ");
-      Serial.print(myPID.GetKp());
-      Serial.print(" Ki = ");
-      Serial.print(myPID.GetKi());
-      Serial.print(" Kd = ");
-      Serial.print(myPID.GetKd());
-      Serial.print(" Mode = ");
-      Serial.println(myPID.GetMode());
+      //Serial.print("Kp = ");
+      //Serial.print(myPID.GetKp());
+      //Serial.print(" Ki = ");
+      //Serial.print(myPID.GetKi());
+      //Serial.print(" Kd = ");
+      //Serial.print(myPID.GetKd());
+      //Serial.print(" Mode = ");
+      //Serial.println(myPID.GetMode());
       previousMillis = millis();                  // update the time we last printed
   }
 }
