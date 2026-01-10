@@ -6,7 +6,7 @@
 #include "JY901_Serial.h"
 
 // ---- Set pin numbers: ----
-const int buttonPin = 13;                 // the number of the pushbutton pin
+const int buttonPin = 11;                 // the number of the pushbutton pin
 
 // ---- Key Parameters ----
     //const int encLend = 10*1920;             // pulses for left motor - not used 
@@ -21,27 +21,29 @@ const double blockSize = 50.0; // Size of one of side of a "block" on the grid (
 
 // ---- Motor Setup ----
   // Left Motor
-    const unsigned int PWMA = 3; 
-    const unsigned int AIN2 = 6; 
-    const unsigned int AIN1 = 5; 
+    const unsigned int PWMA = 2; 
+    const unsigned int AIN2 = 3; 
+    const unsigned int AIN1 = 4; 
   // Right Motor
-    const unsigned int BIN1 = 7; 
-    const unsigned int BIN2 = 8; 
-    const unsigned int PWMB = 9; 
+    const unsigned int BIN1 = 6; 
+    const unsigned int BIN2 = 7; 
+    const unsigned int PWMB = 8; 
+  // Motor Controller
+    const unsigned int STBY = 5;
 
 // ---- Motor Variables ---- 
   // Initialize both motors
-    Motor motorLeft(AIN1, AIN2, PWMA, 1, 0);
-    Motor motorRight(BIN1, BIN2, PWMB, 1, 0);
+    Motor motorLeft(AIN1, AIN2, PWMA, 1, STBY);
+    Motor motorRight(BIN1, BIN2, PWMB, 1, STBY);
   // Encoders Setup
     // Left Motor Encoder
-      const byte encoderLpinA = A5;            // A pin -> the interrupt pin 0
-      const byte encoderLpinB = 11;           // B pin -> the digital pin 3
+      const byte encoderLpinA = 13;            // A pin -> the interrupt pin 0
+      const byte encoderLpinB = 9;           // B pin -> the digital pin 3
       byte encoderLPinALast;
       long encLpulses;                        // the number of the pulses
       boolean encLdir;                        // the rotation direction
     // Right Motor Encoder
-      const byte encoderRpinA = A4;            // A pin -> the interrupt pin 0
+      const byte encoderRpinA = 12;            // A pin -> the interrupt pin 0
       const byte encoderRpinB = 10;           // B pin -> the digital pin 3
       byte encoderRPinALast;
       long encRpulses;                        // the number of the pulses
@@ -132,8 +134,8 @@ void loop() {
 
   if (beginPath) {
     Serial.println("running");
-    motorLeft.drive(10,500);
-    motorRight.drive(10,500);
+    motorLeft.drive(10);
+    motorRight.drive(10);
     
     /* ---------------- DO NOT TOUCH ----------------- */
     //moveStraightFoward(22.0+9.0);
