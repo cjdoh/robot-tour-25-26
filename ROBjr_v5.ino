@@ -6,7 +6,7 @@
 #include "JY901_Serial.h"
 
 // ---- Set pin numbers: ----
-const int buttonPin = 53;                 // the number of the pushbutton pin
+const int buttonPin = 3;                 // the number of the pushbutton pin
 
 // ---- Key Parameters ----
     //const int encLend = 10*1920;             // pulses for left motor - not used 
