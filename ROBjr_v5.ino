@@ -12,7 +12,8 @@ const int buttonPin = 11;                 // the number of the pushbutton pin
     //const int encLend = 10*1920;             // pulses for left motor - not used 
 const double travelDist = -50;           // travel distance in CM  
 const double ENCperCM = 58.3727699;                //Number of encoder counts per cm // Chris's value: 59.00727699 // Isaac's value: 59.6107603336
-int motor_speed = 70;                // motor A speed (left Motor)
+int motorSpeed = 100;                // motor A speed (left Motor)
+float motorSpeedMultiplier = 1.12;                // motor A speed (left Motor)
 int run_forward_cnt = 0;               // howmany times we have run forward
 int run_backward_cnt = 0;
 const double turnAngle = 80.0;
@@ -73,12 +74,12 @@ const double blockSize = 50.0; // Size of one of side of a "block" on the grid (
 
 // ---- PID (for going straight) ----
   // PID variables
-    double motorA_offset=motor_speed;
+    double motorOffsetPID=motorSpeed;
     double Kp=1.0, Ki=1.0 , Kd=0;
   // Specify the links and initial tuning parameters
     double blankZero = 0;
     double myError = 0;
-  PID myPID(&blankZero, &motorA_offset, &myError, Kp, Ki, Kd, DIRECT);
+  PID myPID(&blankZero, &motorOffsetPID, &myError, Kp, Ki, Kd, DIRECT);
 
 
 
@@ -134,15 +135,15 @@ void loop() {
 
   if (beginPath) {
     Serial.println("running");
-    motorLeft.drive(10);
-    motorRight.drive(10);
+    //motorLeft.drive(motorSpeed * motorSpeedMultiplier);
+    //motorRight.drive(motorSpeed);
     
     /* ---------------- DO NOT TOUCH ----------------- */
     //moveStraightFoward(22.0+9.0);
     /* ---------------- DO NOT TOUCH ----------------- */
     
     // run primitives here
-    //move(3);
+    move(3);
   
 
 
@@ -182,7 +183,7 @@ void move(int blocks) {
   if (blocks >= 0){
     moveStraightFoward(distanceCentimeters);
   } else {
-    moveStraightBackward(-distanceCentimeters);
+    moveStraightBackward(distanceCentimeters);
   }  
 }
 
@@ -248,7 +249,8 @@ void moveStraightFoward(double distance) {
       if (!isMovingFoward) {
         // Start Moving 
         myPID.SetMode(1);
-        forward(motorLeft, motorRight, motor_speed);
+        motorLeft.drive(motorSpeed * motorSpeedMultiplier);
+        motorRight.drive(motorSpeed);
         isMovingFoward = true;
       }
       update_heading();
@@ -278,7 +280,8 @@ void moveStraightBackward(double distance) {
         // Start Moving
         // Make robot drive backward
         myPID.SetMode(1);
-        forward(motorLeft, motorRight, -motor_speed);
+        motorLeft.drive(-motorSpeed * motorSpeedMultiplier);
+        motorRight.drive(-motorSpeed);
         isMovingBackward = true;
       }
       update_heading();
@@ -298,16 +301,16 @@ void moveStraightBackward(double distance) {
 void KeepStraightF() {
   update_heading();
   myPID.Compute();
-  motorLeft.drive(motorA_offset);
-  motorRight.drive(motor_speed);
+  motorLeft.drive(motorOffsetPID);
+  motorRight.drive(motorSpeed);
   printDebugInfo();
 }
 
 void KeepStraightB() {
   update_heading();
   myPID.Compute();
-  motorLeft.drive(-motor_speed);
-  motorRight.drive(-motorA_offset);
+  motorLeft.drive(-motorSpeed);
+  motorRight.drive(-motorOffsetPID);
   printDebugInfo();
 }
 
@@ -388,7 +391,6 @@ void update_heading(){
 }
 
 void printDebugInfo() {
-  return;
   if(millis() - previousMillis > printDebugCooldown)
     {
     // Print motor info in Serial Monitor
@@ -425,9 +427,9 @@ void printDebugInfo() {
       Serial.print(motors.getSpeedB());
       */
       Serial.print("Setpoint = ");
-      Serial.print(motor_speed);
+      Serial.print(motorSpeed);
       Serial.print(", Motor A Offset = ");
-      Serial.println(motorA_offset);
+      Serial.println(motorOffsetPID);
       // Start new Line
       Serial.print("Left Encoder Count = ");
       Serial.print(encLpulses);
