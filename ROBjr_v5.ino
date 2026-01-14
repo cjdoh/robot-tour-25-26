@@ -1,7 +1,6 @@
 //#include <L298NX2.h>
 #include <SparkFun_TB6612.h>
 #include <Wire.h>
-//#include "JY901.h"/Users/jeremiahlaing/Documents/Arduino/libraries/SparkFun_TB6612FNG_Arduino_Library-master/src/SparkFun_TB6612.h
 #include <PID_v1.h>
 #include "JY901_Serial.h"
 
@@ -13,10 +12,10 @@ const int buttonPin = 11;                 // the number of the pushbutton pin
 const double travelDist = -50;           // travel distance in CM  
 const double ENCperCM = 58.3727699;                //Number of encoder counts per cm // Chris's value: 59.00727699 // Isaac's value: 59.6107603336
 int motorSpeed = 100;                // motor A speed (left Motor)
-float motorSpeedMultiplier = 1.12;                // motor A speed (left Motor)
+float motorSpeedMultiplier = 1.13;                // motor A speed (left Motor)
 int run_forward_cnt = 0;               // howmany times we have run forward
 int run_backward_cnt = 0;
-const double turnAngle = 80.0;
+const double turnAngle = 70.0;
 
 const double blockSize = 50.0; // Size of one of side of a "block" on the grid (centimeters)
 
@@ -52,7 +51,7 @@ const double blockSize = 50.0; // Size of one of side of a "block" on the grid (
       long encEnd;                            // encoder endpoint for move
 
   // General variables:
-    const long printDebugCooldown = 1000;                // Minimum time (milliseconds) between printing updates to the console
+    const long printDebugCooldown = 100;                // Minimum time (milliseconds) between printing updates to the console
     int buttonState = 0;                      // Variable for reading the pushbutton status
     int lastbuttonState = 0;                  // Variable for reading the last pushbutton status
     int buttonSpeedState = 0;                      // Variable for reading the pushbutton speed status
@@ -143,7 +142,7 @@ void loop() {
     /* ---------------- DO NOT TOUCH ----------------- */
     
     // run primitives here
-    move(3);
+    left();
   
 
 
@@ -212,18 +211,21 @@ void right() {
 }
 
 void left() {
-  // update_heading();
-  currentHeading = read_compass();
-  goalHeading = currentHeading + turnAngle;
+  //currentHeading = read_compass();
+  update_heading();
+  double initialHeading = heading;
+  goalHeading = heading + turnAngle;
+  
   if (goalHeading > 360.0) {
     goalHeading -= 360.0;
   }
 
-  left(motorLeft,motorRight,50);
-
-  while ((currentHeading < goalHeading) || (abs(currentHeading-goalHeading) > turnAngle)) {
-    // update_heading();
-    currentHeading = read_compass();
+  //left(motorLeft,motorRight,50);
+  motorLeft.drive(-motorSpeed * motorSpeedMultiplier);
+  motorRight.drive(motorSpeed);
+  //|| (abs(heading-goalHeading) > turnAngle)
+  while ((heading-initialHeading < turnAngle)) {
+    update_heading();
     printDebugInfo();
   }
   hit_breaks();
@@ -301,8 +303,8 @@ void moveStraightBackward(double distance) {
 void KeepStraightF() {
   update_heading();
   myPID.Compute();
-  motorLeft.drive(motorOffsetPID);
-  motorRight.drive(motorSpeed);
+  motorLeft.drive(motorSpeed);
+  motorRight.drive(motorOffsetPID);
   printDebugInfo();
 }
 
@@ -405,7 +407,7 @@ void printDebugInfo() {
       Serial.print("    Compass Heading = ");
       Serial.print(heading);
       Serial.print("    Compass Delta = ");
-      Serial.println(startHeading-heading);
+      Serial.println(heading-startHeading);
       Serial.print("Turn Compass Heading = ");
       Serial.print(currentHeading);
       Serial.print("    Straight Heading = ");
