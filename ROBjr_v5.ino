@@ -11,11 +11,11 @@ const int buttonPin = 11;                 // the number of the pushbutton pin
     //const int encLend = 10*1920;             // pulses for left motor - not used 
 const double travelDist = -50;           // travel distance in CM  
 const double ENCperCM = 58.3727699;                //Number of encoder counts per cm // Chris's value: 59.00727699 // Isaac's value: 59.6107603336
-int motorSpeed = 100;                // motor A speed (left Motor)
+int motorSpeed = 50;                // motor A speed (left Motor)
 float motorSpeedMultiplier = 1.13;                // motor A speed (left Motor)
 int run_forward_cnt = 0;               // howmany times we have run forward
 int run_backward_cnt = 0;
-const double turnAngle = 70.0;
+const double turnAngle = 80.0;
 
 const double blockSize = 50.0; // Size of one of side of a "block" on the grid (centimeters)
 
@@ -143,6 +143,13 @@ void loop() {
     
     // run primitives here
     left();
+    left();
+    left();
+    left();
+    left();
+    left();
+    left();
+    left();
   
 
 
@@ -213,7 +220,8 @@ void right() {
 void left() {
   //currentHeading = read_compass();
   update_heading();
-  double initialHeading = heading;
+  double deltaAngle = 0.0;
+  double lastHeading = heading;
   goalHeading = heading + turnAngle;
   
   if (goalHeading > 360.0) {
@@ -224,9 +232,19 @@ void left() {
   motorLeft.drive(-motorSpeed * motorSpeedMultiplier);
   motorRight.drive(motorSpeed);
   //|| (abs(heading-goalHeading) > turnAngle)
-  while ((heading-initialHeading < turnAngle)) {
+  while ((deltaAngle < turnAngle)) {
+    // update_heading();
     update_heading();
+    if (getSign(heading) != getSign(lastHeading)){
+      lastHeading = getSign(heading) * lastHeading;
+    }
+    deltaAngle += abs(heading - lastHeading);
+    lastHeading = heading;
+    
+
+
     printDebugInfo();
+    Serial.println("DELTAANGLE: " + String(deltaAngle)+ "(" + String(heading) + " - " + String(lastHeading) + ")");
   }
   hit_breaks();
 
@@ -238,6 +256,7 @@ void left() {
   delay(200);
 
 }
+
 
 void moveStraightFoward(double distance) {
   update_heading();
@@ -392,7 +411,16 @@ void update_heading(){
 
 }
 
+int getSign(double number){
+  if (number >= 0){
+    return 1;
+  } else {
+    return -1;
+  }
+}
+
 void printDebugInfo() {
+  return;
   if(millis() - previousMillis > printDebugCooldown)
     {
     // Print motor info in Serial Monitor
