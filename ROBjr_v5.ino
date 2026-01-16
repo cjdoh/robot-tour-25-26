@@ -11,8 +11,8 @@ const int buttonPin = 11;                 // the number of the pushbutton pin
     //const int encLend = 10*1920;             // pulses for left motor - not used 
 const double travelDist = -50;           // travel distance in CM  
 const double ENCperCM = 58.3727699;                //Number of encoder counts per cm // Chris's value: 59.00727699 // Isaac's value: 59.6107603336
-int motorSpeed = 50;                // motor A speed (left Motor)
-float motorSpeedMultiplier = 1.13;                // motor A speed (left Motor)
+int motorSpeed = 100;                // motor A speed (left Motor)
+float motorSpeedMultiplier = 1.12;                // motor A speed (left Motor)
 int run_forward_cnt = 0;               // howmany times we have run forward
 int run_backward_cnt = 0;
 const double turnAngle = 80.0;
@@ -37,13 +37,13 @@ const double blockSize = 50.0; // Size of one of side of a "block" on the grid (
     Motor motorRight(BIN1, BIN2, PWMB, 1, STBY);
   // Encoders Setup
     // Left Motor Encoder
-      const byte encoderLpinA = 13;            // A pin -> the interrupt pin 0
+      const byte encoderLpinA = 21;            // A pin -> the interrupt pin 0
       const byte encoderLpinB = 9;           // B pin -> the digital pin 3
       byte encoderLPinALast;
       long encLpulses;                        // the number of the pulses
       boolean encLdir;                        // the rotation direction
     // Right Motor Encoder
-      const byte encoderRpinA = 12;            // A pin -> the interrupt pin 0
+      const byte encoderRpinA = 20;            // A pin -> the interrupt pin 0
       const byte encoderRpinB = 10;           // B pin -> the digital pin 3
       byte encoderRPinALast;
       long encRpulses;                        // the number of the pulses
@@ -60,6 +60,8 @@ const double blockSize = 50.0; // Size of one of side of a "block" on the grid (
     bool isMovingFoward = false;                // TRUE if robot is moving foward
     bool isMovingBackward = false;               // TRUE if robot is backward
     unsigned long previousMillis = millis();         // will store last time Motor was run
+
+    double pitch = 0;
 
     double heading = 0;                        // Compass heading
     double startHeading = 0;                        // Compass starting heading (when button is pressed)
@@ -142,15 +144,9 @@ void loop() {
     /* ---------------- DO NOT TOUCH ----------------- */
     
     // run primitives here
+    move(1);
     left();
-    left();
-    left();
-    left();
-    left();
-    left();
-    left();
-    left();
-  
+    move(10);
 
 
     /* ---------------- DO NOT TOUCH ----------------- */
@@ -164,7 +160,7 @@ void loop() {
 }
 
 // Move foward n blocks
-void foward(int blocks = 1){
+void fw(int blocks = 1){
   move(blocks);
 }
 
@@ -174,7 +170,7 @@ void capture(){
 }
 
 // Move backward n blocks
-void backward(int blocks = 1){
+void bw(int blocks = 1){
   move(-blocks);
 }
 
@@ -211,12 +207,13 @@ void right() {
   hit_breaks();
   delay(200);
 
-  straightHeading -= 90;
+  //straightHeading -= 90;
+  straightHeading = heading;
   if (straightHeading < -180) {
     straightHeading += 360;
   }
 }
-
+/*
 void left() {
   //currentHeading = read_compass();
   update_heading();
@@ -257,15 +254,45 @@ void left() {
 
 }
 
+*/
+void left() {
+  //currentHeading = read_compass();
+  encEnd = 14.25 * ENCperCM;
+  encLpulses = 0;
+  
+  if (goalHeading > 360.0) {
+    goalHeading -= 360.0;
+  }
+  long initialTime = millis(); 
+  
+  //left(motorLeft,motorRight,50);
+  motorLeft.drive(-motorSpeed * motorSpeedMultiplier);
+  motorRight.drive(motorSpeed);
+  //|| (abs(heading-goalHeading) > turnAngle)
+  while ((millis() - initialTime) < 2450) {
+    // update_heading();
+
+    printDebugInfo();
+  }
+  hit_breaks();
+
+  update_heading();
+  straightHeading = heading;
+
+  delay(200);
+
+}
+
 
 void moveStraightFoward(double distance) {
   update_heading();
   encEnd = distance * ENCperCM;
   encLpulses = 0;
   encRpulses = 0;
-  goalHeading = straightHeading;
+  straightHeading = heading;
   while (encRpulses < encEnd && encLpulses < encEnd) {
-
+    update_heading();
+    goalHeading = straightHeading;
     // Check to see if you are moving or if you need to start moving
       if (!isMovingFoward) {
         // Start Moving 
@@ -274,7 +301,6 @@ void moveStraightFoward(double distance) {
         motorRight.drive(motorSpeed);
         isMovingFoward = true;
       }
-      update_heading();
       KeepStraightF();
       printDebugInfo();
   }
@@ -382,7 +408,7 @@ void EncoderRCounter() {
   }
   encoderRPinALast = encRLstate;
 
-  if(!encRdir) encRpulses--;
+  if(encRdir) encRpulses--;
   else encRpulses++;
 }
 
@@ -420,11 +446,23 @@ int getSign(double number){
 }
 
 void printDebugInfo() {
-  return;
+  
   if(millis() - previousMillis > printDebugCooldown)
     {
     // Print motor info in Serial Monitor
+      Serial.print("    Compass Heading = ");
+      Serial.print(heading);
+      Serial.print("    Straight Heading = ");
+      Serial.println(straightHeading);
+      Serial.print("MyError = ");
+      Serial.print(myError);
+      return;
       Serial.print("\033[0H\033[0J");       //Clear terminal window
+
+      Serial.print("    Compass Delta = ");
+      Serial.println(heading-startHeading);
+      Serial.print("Turn Compass Heading = ");
+      Serial.print(currentHeading);
       
       Serial.print("Bytes Avalible = ");
       Serial.print(Serial.availableForWrite());
@@ -432,14 +470,7 @@ void printDebugInfo() {
       Serial.println(run_forward_cnt);
       Serial.print("    Goal Heading/PID Heading = ");
       Serial.print(goalHeading);
-      Serial.print("    Compass Heading = ");
-      Serial.print(heading);
-      Serial.print("    Compass Delta = ");
-      Serial.println(heading-startHeading);
-      Serial.print("Turn Compass Heading = ");
-      Serial.print(currentHeading);
-      Serial.print("    Straight Heading = ");
-      Serial.println(straightHeading);
+      
       /*
       Serial.print("Left Motor Direction = ");
       Serial.print(motors.getDirectionA() ? "F" : "R");
