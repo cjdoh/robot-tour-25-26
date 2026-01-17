@@ -10,11 +10,11 @@ const int buttonPin = 11;                 // the number of the pushbutton pin
 // ---- Key Parameters ----
     //const int encLend = 10*1920;             // pulses for left motor - not used 
 const double travelDist = -50;           // travel distance in CM  
-const double ENCperCM = 59.85;                //Number of encoder counts per cm // Chris's value: 59.00727699 // Isaac's value: 59.6107603336
+const double ENCperCM = 60.8475;                // 59.85   Number of encoder counts per cm // Chris's value: 59.00727699 // Isaac's value: 59.6107603336
 int motorSpeed = 120;                // motor A speed (left Motor)
 int turnSpeed = 100;
-int turnTime = 1430;
-float motorSpeedMultiplier = 1.12;                // motor A speed (left Motor)
+int turnTime = 1255;
+float motorSpeedMultiplier = 1.13;                // motor A speed (left Motor)
 int run_forward_cnt = 0;               // howmany times we have run forward
 int run_backward_cnt = 0;
 const double turnAngle = 80.0;
@@ -142,25 +142,26 @@ void loop() {
     //motorRight.drive(motorSpeed);
     
     /* ---------------- DO NOT TOUCH ----------------- */
-    moveStraightForward(20.0);
+    //moveStraightForward(20.0);
     /* ---------------- DO NOT TOUCH ----------------- */
     
     // run primitives here
 
-    left();
-    fw();
-    right();
-    fw();
-    right();
-    move(2);
-    right();
+    for (int i = 0; i < 8; i++){
+      fw();
+      left();
+    }
+    for (int i = 0; i < 8; i++){
+      fw();
+      right();
+    }
   
 
     
 
 
     /* ---------------- DO NOT TOUCH ----------------- */
-    moveStraightForward(5.0);
+    //moveStraightForward(5.0);
     /* ---------------- DO NOT TOUCH ----------------- */
 
     beginPath = false;
