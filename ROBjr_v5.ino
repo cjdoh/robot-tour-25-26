@@ -10,8 +10,10 @@ const int buttonPin = 11;                 // the number of the pushbutton pin
 // ---- Key Parameters ----
     //const int encLend = 10*1920;             // pulses for left motor - not used 
 const double travelDist = -50;           // travel distance in CM  
-const double ENCperCM = 58.3727699;                //Number of encoder counts per cm // Chris's value: 59.00727699 // Isaac's value: 59.6107603336
-int motorSpeed = 100;                // motor A speed (left Motor)
+const double ENCperCM = 59.85;                //Number of encoder counts per cm // Chris's value: 59.00727699 // Isaac's value: 59.6107603336
+int motorSpeed = 120;                // motor A speed (left Motor)
+int turnSpeed = 100;
+int turnTime = 1430;
 float motorSpeedMultiplier = 1.12;                // motor A speed (left Motor)
 int run_forward_cnt = 0;               // howmany times we have run forward
 int run_backward_cnt = 0;
@@ -76,7 +78,7 @@ const double blockSize = 50.0; // Size of one of side of a "block" on the grid (
 // ---- PID (for going straight) ----
   // PID variables
     double motorOffsetPID=motorSpeed;
-    double Kp=1.0, Ki=1.0 , Kd=0;
+    double Kp=3, Ki=0 , Kd=0;
   // Specify the links and initial tuning parameters
     double blankZero = 0;
     double myError = 0;
@@ -140,17 +142,25 @@ void loop() {
     //motorRight.drive(motorSpeed);
     
     /* ---------------- DO NOT TOUCH ----------------- */
-    //moveStraightFoward(22.0+9.0);
+    moveStraightForward(20.0);
     /* ---------------- DO NOT TOUCH ----------------- */
     
     // run primitives here
-    move(1);
+
     left();
-    move(10);
+    fw();
+    right();
+    fw();
+    right();
+    move(2);
+    right();
+  
+
+    
 
 
     /* ---------------- DO NOT TOUCH ----------------- */
-    //moveStraightBackward(-9.0);
+    moveStraightForward(5.0);
     /* ---------------- DO NOT TOUCH ----------------- */
 
     beginPath = false;
@@ -160,18 +170,18 @@ void loop() {
 }
 
 // Move foward n blocks
-void fw(int blocks = 1){
-  move(blocks);
+void fw(){
+  move(1);
 }
 
 // Move a half step foward
 void capture(){
-  moveStraightFoward(blockSize/2.0);
+  moveStraightForward(blockSize/2.0);
 }
 
 // Move backward n blocks
-void bw(int blocks = 1){
-  move(-blocks);
+void bw(){
+  move(-1);
 }
 
 // Move a half step backward
@@ -183,95 +193,36 @@ void release(){
 void move(int blocks) {
   double distanceCentimeters = (double)blocks * blockSize;
   if (blocks >= 0){
-    moveStraightFoward(distanceCentimeters);
+    moveStraightForward(distanceCentimeters);
   } else {
     moveStraightBackward(distanceCentimeters);
   }  
 }
 
 void right() {
-  // update_heading();
-  currentHeading = read_compass();
-  goalHeading = currentHeading - turnAngle;
-  if (goalHeading < 0.0) {
-    goalHeading += 360.0;
-  }
+  long initialTime = millis(); 
 
-  right(motorLeft,motorRight,50);
+  motorLeft.drive(turnSpeed * motorSpeedMultiplier);
+  motorRight.drive(-turnSpeed);
 
-  while ((currentHeading > goalHeading) || (abs(currentHeading-goalHeading) > turnAngle)) {
-    // update_heading();
-    currentHeading = read_compass();
+  while ((millis() - initialTime) < turnTime) {
     printDebugInfo();
   }
   hit_breaks();
-  delay(200);
 
-  //straightHeading -= 90;
-  straightHeading = heading;
-  if (straightHeading < -180) {
-    straightHeading += 360;
-  }
-}
-/*
-void left() {
-  //currentHeading = read_compass();
   update_heading();
-  double deltaAngle = 0.0;
-  double lastHeading = heading;
-  goalHeading = heading + turnAngle;
-  
-  if (goalHeading > 360.0) {
-    goalHeading -= 360.0;
-  }
-
-  //left(motorLeft,motorRight,50);
-  motorLeft.drive(-motorSpeed * motorSpeedMultiplier);
-  motorRight.drive(motorSpeed);
-  //|| (abs(heading-goalHeading) > turnAngle)
-  while ((deltaAngle < turnAngle)) {
-    // update_heading();
-    update_heading();
-    if (getSign(heading) != getSign(lastHeading)){
-      lastHeading = getSign(heading) * lastHeading;
-    }
-    deltaAngle += abs(heading - lastHeading);
-    lastHeading = heading;
-    
-
-
-    printDebugInfo();
-    Serial.println("DELTAANGLE: " + String(deltaAngle)+ "(" + String(heading) + " - " + String(lastHeading) + ")");
-  }
-  hit_breaks();
-
-  straightHeading += 90;
-  if (straightHeading > 180) {
-    straightHeading -= 360;
-  }
+  straightHeading = heading;
 
   delay(200);
-
 }
 
-*/
 void left() {
-  //currentHeading = read_compass();
-  encEnd = 14.25 * ENCperCM;
-  encLpulses = 0;
-  
-  if (goalHeading > 360.0) {
-    goalHeading -= 360.0;
-  }
   long initialTime = millis(); 
   
-  //left(motorLeft,motorRight,50);
-  motorLeft.drive(-motorSpeed * motorSpeedMultiplier);
-  motorRight.drive(motorSpeed);
-  //|| (abs(heading-goalHeading) > turnAngle)
-  while ((millis() - initialTime) < 2450) {
-    // update_heading();
+  motorLeft.drive(-turnSpeed * motorSpeedMultiplier);
+  motorRight.drive(turnSpeed);
 
+  while ((millis() - initialTime) < turnTime) {
     printDebugInfo();
   }
   hit_breaks();
@@ -284,7 +235,7 @@ void left() {
 }
 
 
-void moveStraightFoward(double distance) {
+void moveStraightForward(double distance) {
   update_heading();
   encEnd = distance * ENCperCM;
   encLpulses = 0;
@@ -347,8 +298,8 @@ void moveStraightBackward(double distance) {
 
 void KeepStraightF() {
   update_heading();
-  myPID.Compute();
-  motorLeft.drive(motorSpeed);
+  //myPID.Compute();
+  motorLeft.drive(motorSpeed * motorSpeedMultiplier);
   motorRight.drive(motorOffsetPID);
   printDebugInfo();
 }
@@ -356,7 +307,7 @@ void KeepStraightF() {
 void KeepStraightB() {
   update_heading();
   myPID.Compute();
-  motorLeft.drive(-motorSpeed);
+  motorLeft.drive(-motorSpeed * motorSpeedMultiplier);
   motorRight.drive(-motorOffsetPID);
   printDebugInfo();
 }
