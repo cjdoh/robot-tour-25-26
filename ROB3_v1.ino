@@ -7,10 +7,12 @@
 // ---------------    Parameters   ---------------
 
 const double BLOCK_SIZE = 50.0;          // Length of one grid square (in centimeters)
-const double ENCODER_PER_CENTIMETER = = 60.8475;          // Encoder pulses per 1 cm
+const double ENCODER_PER_CENTIMETER = 60.8475;          // Encoder pulses per 1 cm
+const double MOTOR_SPEED = 100.0;         // Base speed of both motors
 
 const double MOTOR_SPEED_MIN = 100.0;         // Starting/ending speed of both motors
 const double MOTOR_SPEED_MAX = 140.0;         // Maximum speed of both motors
+
 const double MOTOR_SPEED_MULTIPLIER = 1.13;         // In case one motor is slower than the other, only applies to the left motor
 
 // ---------------   Arduino Pins   ---------------
@@ -46,10 +48,12 @@ Motor motorRight(BIN1, BIN2, PWMB, 1, STBY);
 long encoderEnd; // Variable to hold the amount of encoder pulses to reach the target
 // Left Encoder
 boolean encoderLeftDirection;          // Tracks the direction of the left motor (TRUE is foward)
-long encoderPulsesLeft;         // Tracks the amount of encoder pulses in the left motor
+long encoderLeftPulses;         // Tracks the amount of encoder pulses in the left motor
+int encoderLeftLastState;
 // Right Encoder
 boolean encoderRightDirection;         // Tracks the direction of the right motor (TRUE is foward)
-long encoderPulsesLeft;         // Tracks the amount of encoder pulses in the left motor
+long encoderRightPulses;         // Tracks the amount of encoder pulses in the left motor
+int encoderRightLastState;
 
 // ---------------       PID       ---------------
 
@@ -90,8 +94,8 @@ void setup(){
   pinMode(BUTTON_PIN, INPUT);
 
   // Initialize encoders
-  encoderPulsesLeft = 0;
-  encoderPulsesRight = 0;
+  encoderLeftPulses = 0;
+  encoderRightPulses = 0;
   encodersInit();
   
   // Initialize PID
@@ -111,7 +115,7 @@ void loop(){
   if (buttonState == HIGH && lastButtonState == LOW){
 
     // Give time to take finger off of the button
-    delay(2000); 
+    delay(1440); 
 
     // Begin the path
     beginPath = true;
@@ -124,18 +128,25 @@ void loop(){
     Serial.print("##### RUNNING ######");
 
     // Move into the first square
-    moveDistance(20.0);
-    delay(300);
+    //moveDistance(20.0);
 
     // ---------------  Create Path Here  ---------------
 
-fw(1):
+    fw();
+    left();
+    fw();
+    left();
+    fw();
+    left();
+    fw();
+    left();
+    fw();
+    left();
 
     // --------------------------------------------------
 
     // Move dowel to the ending location
-    delay(300);
-    moveDistance(5.0);
+    //moveDistance(5.0);
 
     // Stop running the path
     beginPath = false;
@@ -166,8 +177,8 @@ void moveDistance(double distance){
 
   // Set encoders
   encoderEnd = abs(distance * ENCODER_PER_CENTIMETER);
-  encoderPulsesLeft = 0;
-  encoderPulsesRight = 0;
+  encoderLeftPulses = 0;
+  encoderRightPulses = 0;
 
   // Determine direction of target distance
   int direction;
@@ -178,22 +189,17 @@ void moveDistance(double distance){
   }
 
   // Tell motors to drive in the direction of the target distance
-  for (double i = 1.0; MOTOR_SPEED_MIN * i < MOTOR_SPEED_MAX; i += 0.01) {
-    motorLeft.drive(MOTOR_SPEED_MIN * MOTOR_SPEED_MULTIPLIER * direction * i)
-    motorRight.drive(MOTOR_SPEED_MIN * direction * i, 100);
-  }
+  motorLeft.drive(MOTOR_SPEED * MOTOR_SPEED_MULTIPLIER * direction);
+  motorRight.drive(MOTOR_SPEED * direction);
 
-  while (abs(encoderPulsesLeft) < encoderEnd && abs(encoderPulsesRight) < encoderEnd){ // Wait for the encoders to count to the target pulse count
+  while (abs(encoderLeftPulses) < encoderEnd && abs(encoderRightPulses) < encoderEnd){ // Wait for the encoders to count to the target pulse count
     // Wait
+    Serial.println(encoderLeftPulses);
 
     // ~~~~~~~~~~~~~~~ TODO: Fix the PID / keep the robot moving straight without relying on the initial angle of the robot ~~~~~~~~~~~~~~~
 
   }
-  
-  for (double i = 1.0; MOTOR_SPEED_MAX * i > MOTOR_SPEED_MAX; i -= 0.01) {
-    motorLeft.drive(MOTOR_SPEED_MAX * MOTOR_SPEED_MULTIPLIER * direction * i)
-    motorRight.drive(MOTOR_SPEED_MAX * direction * i, 100);
-  }
+
   // Stop moving after target distance is reached
   hitBrakes();
 
@@ -258,8 +264,8 @@ void encoderLeftCounter() {
   }
   encoderLeftLastState = leftStateA;
 
-  if(encoderLeftDirection)  encoderPulsesLeft++; // NOTE: This is opposite of the right encoder since they are inverted
-  else  encoderPulsesLeft--;
+  if(encoderLeftDirection)  encoderLeftPulses++; // NOTE: This is opposite of the right encoder since they are inverted
+  else  encoderLeftPulses--;
 }
 
 void encoderRightCounter() {
@@ -280,6 +286,6 @@ void encoderRightCounter() {
   }
   encoderRightLastState = rightStateA;
 
-  if(encoderRightDirection)  encoderPulsesRight++;
-  else  encoderPulsesRight--;
+  if(encoderRightDirection)  encoderRightPulses++;
+  else  encoderRightPulses--;
 }
