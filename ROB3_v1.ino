@@ -148,11 +148,11 @@ void bw(double blocks){
 }
 
 void left(){
-  turnAngle(-90.0);
+  turnDegrees(-90.0);
 }
 
 void right(){
-  turnAngle(90.0);
+  turnDegrees(90.0);
 }
 
 // Movement Functions
@@ -188,7 +188,7 @@ void moveDistance(double distance){
 
 }
 
-void turnAngle(double degrees){
+void turnDegrees(double degrees){
 
   // Determine direction of target angle
   int direction;
