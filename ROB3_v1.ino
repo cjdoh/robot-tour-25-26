@@ -7,9 +7,9 @@
 // ---------------    Parameters   ---------------
 
 const double BLOCK_SIZE = 50.0;          // Length of one grid square (in centimeters)
-const double ENCODER_PER_CENTIMETER = 0.0;          // Encoder pulses per 1 cm
+const double ENCODER_PER_CENTIMETER = = 60.8475;          // Encoder pulses per 1 cm
 const double MOTOR_SPEED = 100.0;         // Base speed of both motors
-const double MOTOR_SPEED_MULTIPLIER = 1.13;         // In case one motor is slower than the other
+const double MOTOR_SPEED_MULTIPLIER = 1.13;         // In case one motor is slower than the other, only applies to the left motor
 
 // ---------------   Arduino Pins   ---------------
 
@@ -62,7 +62,7 @@ const long PRINT_DEBUG_COOLDOWN = 100;          // Time between printing debug i
 int buttonState;          // Variable for reading the start button status
 int lastButtonState;          // Variable for reading the previous start button status
 
-double heading = 0.0;
+double heading = 0.0;  // The heading of the compass
 
 bool beginPath = false;         // If set to TRUE, the set movement primitives will run
 
@@ -88,8 +88,9 @@ void setup(){
   pinMode(BUTTON_PIN, INPUT);
 
   // Initialize encoders
-  encoderPulsesLeft, encoderPulsesRight = 0;
-  EncodersInit();
+  encoderPulsesLeft = 0;
+  encoderPulsesRight = 0;
+  encodersInit();
   
   // Initialize PID
 
@@ -110,7 +111,7 @@ void loop(){
     // Give time to take finger off of the button
     delay(2000); 
 
-    // Begin the given path
+    // Begin the path
     beginPath = true;
 
   }
@@ -218,18 +219,18 @@ void hitBrakes(){
 
 // Encoder Functions
 
-void EncodersInit() {
+void encodersInit() {
   encoderLeftDirection = true;                           // TRUE -> Forward
   encoderRightDirection = true;                           // TRUE -> Forward
 
   pinMode(ENCODER_LEFT_PIN_B,INPUT);
   pinMode(ENCODER_RIGHT_PIN_B,INPUT);
 
-  attachInterrupt(2, EncoderLeftCounter, CHANGE);
-  attachInterrupt(3, EncoderRightCounter, CHANGE);
+  attachInterrupt(2, encoderLeftCounter, CHANGE);
+  attachInterrupt(3, encoderRightCounter, CHANGE);
 }
 
-void EncoderLeftCounter() {
+void encoderLeftCounter() {
   int leftStateA = digitalRead(ENCODER_LEFT_PIN_A);
   if(encoderLeftLastState == LOW && leftStateA == HIGH)
   {
@@ -251,7 +252,7 @@ void EncoderLeftCounter() {
   else  encoderPulsesLeft--;
 }
 
-void EncoderRightCounter() {
+void encoderRightCounter() {
   int rightStateA = digitalRead(ENCODER_RIGHT_PIN_A);
   if(encoderRightLastState == LOW && rightStateA == HIGH)
   {
