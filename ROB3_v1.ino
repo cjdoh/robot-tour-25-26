@@ -8,12 +8,17 @@
 
 const double BLOCK_SIZE = 50.0;          // Length of one grid square (in centimeters)
 const double ENCODER_PER_CENTIMETER = 60.8475;          // Encoder pulses per 1 cm
-const double MOTOR_SPEED = 100.0;         // Base speed of both motors
 
-const double MOTOR_SPEED_MIN = 100.0;         // Starting/ending speed of both motors
-const double MOTOR_SPEED_MAX = 140.0;         // Maximum speed of both motors
+const double TURN_TIME = 1600;
+
+const double MOTOR_SPEED_MIN = 50.0;         // Starting and ending speed of both motors
+const double MOTOR_SPEED_MAX = 220.0;         // Maximum speed of both motors
 
 const double MOTOR_SPEED_MULTIPLIER = 1.13;         // In case one motor is slower than the other, only applies to the left motor
+
+const double MOTOR_SPEED = 100.0;         // Base speed of both motors (DEPRECATED)
+
+const double TURN_SIZE = 22.38;
 
 // ---------------   Arduino Pins   ---------------
 
@@ -68,7 +73,9 @@ const long PRINT_DEBUG_COOLDOWN = 100;          // Time between printing debug i
 int buttonState;          // Variable for reading the start button status
 int lastButtonState;          // Variable for reading the previous start button status
 
-double heading = 0.0;  // The heading of the compass
+double heading = 0.0;         // The heading of the compass
+
+double moveSpeed = 0.0;         // The current speed of the motors (while moving with moveDistance)
 
 bool beginPath = false;         // If set to TRUE, the set movement primitives will run
 
@@ -94,8 +101,8 @@ void setup(){
   pinMode(BUTTON_PIN, INPUT);
 
   // Initialize encoders
-  encoderLeftPulses = 0;
-  encoderRightPulses = 0;
+  encoderLeftPulses = 0.0;
+  encoderRightPulses = 0.0;
   encodersInit();
   
   // Initialize PID
@@ -131,14 +138,11 @@ void loop(){
     //moveDistance(20.0);
 
     // ---------------  Create Path Here  ---------------
-
-    fw();
+    fw(3);
     left();
     fw();
     left();
-    fw();
-    left();
-    fw();
+    fw(3);
     left();
     fw();
     left();
@@ -177,8 +181,16 @@ void moveDistance(double distance){
 
   // Set encoders
   encoderEnd = abs(distance * ENCODER_PER_CENTIMETER);
-  encoderLeftPulses = 0;
-  encoderRightPulses = 0;
+  encoderLeftPulses = 0.0;
+  encoderRightPulses = 0.0;
+  long avgPulses = 0.0;
+  long distanceFromStart = 0.0;
+  double midpointSpeed = 0.0;
+
+  long initialTime = millis();
+  long time = 0.0;
+
+  boolean accelerate = true;
 
   // Determine direction of target distance
   int direction;
@@ -189,16 +201,77 @@ void moveDistance(double distance){
   }
 
   // Tell motors to drive in the direction of the target distance
-  motorLeft.drive(MOTOR_SPEED * MOTOR_SPEED_MULTIPLIER * direction);
-  motorRight.drive(MOTOR_SPEED * direction);
+  //motorLeft.drive(MOTOR_SPEED * MOTOR_SPEED_MULTIPLIER * direction);
+  //motorRight.drive(MOTOR_SPEED * direction);
 
-  while (abs(encoderLeftPulses) < encoderEnd && abs(encoderRightPulses) < encoderEnd){ // Wait for the encoders to count to the target pulse count
+  /*
+  for (double i = 1.0; MOTOR_SPEED_MIN + i < MOTOR_SPEED_MAX; i += 1) {
+    motorLeft.drive((i + MOTOR_SPEED_MIN) * MOTOR_SPEED_MULTIPLIER * direction);
+    motorRight.drive((i + MOTOR_SPEED_MIN) * direction, 5);
+  }
+  */
+
+  while (encoderLeftPulses < encoderEnd){ // Wait for the encoders to count to the target pulse count
+    // Wait
+    Serial.println("DELTA TIME: " + String(time));
+    Serial.println("AVG PULSE: " + String(avgPulses));
+    Serial.println("MOVE SPEED: " + String(moveSpeed));
+    Serial.println("DISTANCE FROM START: " + String(distanceFromStart));
+    Serial.println("ENCODER END: " + String(encoderEnd));
+    Serial.println("MIDPOINT SPEED: " + String(midpointSpeed));
+    
+    
+    time = millis() - initialTime;
+
+    avgPulses = abs((encoderLeftPulses + encoderRightPulses) / 2.0);
+    
+    
+    if (avgPulses < (encoderEnd / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
+      moveSpeed = constrain(
+        MOTOR_SPEED_MIN + ((MOTOR_SPEED_MAX - MOTOR_SPEED_MIN) * time * 0.001),
+        MOTOR_SPEED_MIN,
+        MOTOR_SPEED_MAX
+      );
+      Serial.println("STATE: ACCEL");
+      distanceFromStart = avgPulses;
+    } else if (avgPulses > (encoderEnd - distanceFromStart) && !accelerate){
+      moveSpeed = constrain(
+        midpointSpeed - ((midpointSpeed - 0.0) * time * 0.001),
+        0.0,
+        MOTOR_SPEED_MAX
+      );
+      Serial.println("STATE: DECCEL");
+    } else {
+      initialTime = millis();
+      midpointSpeed = moveSpeed;
+      accelerate = false;
+      Serial.println("STATE: COAST");
+    }
+    Serial.println();
+
+    motorLeft.drive(moveSpeed * MOTOR_SPEED_MULTIPLIER * direction);
+    motorRight.drive(moveSpeed * direction);
+    
+    
+
+    // ~~~~~~~~~~~~~~~ TODO: Fix the PID / keep the robot moving straight without relying on the initial angle of the robot ~~~~~~~~~~~~~~~
+  }
+
+  /*
+
+    for (double i = 1.0; MOTOR_SPEED_MAX - i > MOTOR_SPEED_MIN && abs(encoderLeftPulses) < encoderEnd && abs(encoderRightPulses) < encoderEnd; i += 1) {
+    motorLeft.drive((MOTOR_SPEED_MAX - i) * MOTOR_SPEED_MULTIPLIER * direction);
+    motorRight.drive((MOTOR_SPEED_MAX - i) * direction, 5);
+  }
+
+  while (abs(encoderLeftPulses) < encoderEnd - 1000 && abs(encoderRightPulses) < encoderEnd - 1000){ // Wait for the encoders to count to the target pulse count
     // Wait
     Serial.println(encoderLeftPulses);
 
     // ~~~~~~~~~~~~~~~ TODO: Fix the PID / keep the robot moving straight without relying on the initial angle of the robot ~~~~~~~~~~~~~~~
 
   }
+  */
 
   // Stop moving after target distance is reached
   hitBrakes();
@@ -221,7 +294,7 @@ void turnDegrees(double degrees){
 
   // ~~~~~~~~~~~~~~~ TODO: Create a reliable way to turn a certain amount of degrees ~~~~~~~~~~~~~~~
   
-  delay(2000); // Wait two seconds (temporary)
+  delay(TURN_TIME); // Wait two seconds (temporary)
 
   // Stop moving after reaching target angle
   hitBrakes();
@@ -286,6 +359,6 @@ void encoderRightCounter() {
   }
   encoderRightLastState = rightStateA;
 
-  if(encoderRightDirection)  encoderRightPulses++;
-  else  encoderRightPulses--;
+  if(encoderRightDirection)  encoderRightPulses--;
+  else  encoderRightPulses++;
 }
