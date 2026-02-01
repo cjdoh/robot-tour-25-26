@@ -1,13 +1,13 @@
 #include <SparkFun_TB6612.h>
 #include <Wire.h>
 #include <PID_v1.h>
+#include <EEPROM.h>
+#include <Adafruit_QMC5883P.h>
 
 // ---------------    Parameters   ---------------
 
 const double BLOCK_SIZE = 50.0;          // Length of one grid square (in centimeters)
 const double ENCODER_PER_CENTIMETER = 60.8475;          // Encoder pulses per 1 cm
-
-const double TURN_TIME = 1600;
 
 const double MOTOR_SPEED_MIN = 50.0;         // Starting and ending speed of both motors
 const double MOTOR_SPEED_MAX = 220.0;         // Maximum speed of both motors
@@ -16,7 +16,10 @@ const double MOTOR_SPEED_MULTIPLIER = 1.13;         // In case one motor is slow
 
 const double MOTOR_SPEED = 100.0;         // Base speed of both motors (DEPRECATED)
 
-const double TURN_SIZE = 22.38;
+const double TURN_TOLERANCE = 0.0;          // The maximum difference between the target heading and heading before completing a turn
+
+//const double TURN_SIZE = 22.38;
+//const double TURN_TIME = 1600;
 
 // ---------------   Arduino Pins   ---------------
 
@@ -24,22 +27,22 @@ const double TURN_SIZE = 22.38;
 const int BUTTON_PIN = 11;
 
 // Motor Controller
-const int STBY = 5;
+const int STBY = 7;
 // Left Motor
-const int PWMA = 2;
-const int AIN2 = 3;
-const int AIN1 = 4;
+const int PWMA = 4;
+const int AIN2 = 5;
+const int AIN1 = 6;
 // Right Motor
-const int BIN1 = 6;
-const int BIN2 = 7;
-const int PWMB = 8;
+const int BIN1 = 8;
+const int BIN2 = 9;
+const int PWMB = 10;
 
 // Left Encoder
-const int ENCODER_LEFT_PIN_A = 21;
-const int ENCODER_LEFT_PIN_B = 9;
+const int ENCODER_LEFT_PIN_A = 12;
+const int ENCODER_LEFT_PIN_B = 2;
 // Right Encoder
-const int ENCODER_RIGHT_PIN_A = 20;
-const int ENCODER_RIGHT_PIN_B = 10;
+const int ENCODER_RIGHT_PIN_A = 13;
+const int ENCODER_RIGHT_PIN_B = 3;
 
 // ---------------   Motor Setup   ---------------
 
@@ -58,10 +61,37 @@ boolean encoderRightDirection;         // Tracks the direction of the right moto
 long encoderRightPulses;         // Tracks the amount of encoder pulses in the left motor
 int encoderRightLastState;
 
+// ---------------     Compass     ---------------
+
+// Variables
+float compass = 0.0;         // Actual reading of the compass module
+double heading = 0.0;         // The current heading (accumulative)
+int direction_flag = 0;          // Tracks which region the heading currently is in order to track when heading wraps from 0 to 360
+int revolutions = 0;            // Revolutions
+
+// Component
+Adafruit_QMC5883P mag;
+
+#define EEPROM_MAGIC 0x42
+#define EEPROM_ADDR  0
+
+struct CalData {
+  byte magic;
+  int16_t offsetX;
+  int16_t offsetY;
+  int16_t offsetZ;
+  float scaleX;
+  float scaleY;
+  float scaleZ;
+};
+
+CalData cal;
+
 // ---------------       PID       ---------------
 
 
 // ~~~~~~~~~~~~~~~ TODO: Add PID variables ~~~~~~~~~~~~~~~
+
 
 
 // ---------------  Miscellaneous  ---------------
@@ -70,8 +100,6 @@ const long PRINT_DEBUG_COOLDOWN = 100;          // Time between printing debug i
 
 int buttonState;          // Variable for reading the start button status
 int lastButtonState;          // Variable for reading the previous start button status
-
-double heading = 0.0;         // The heading of the compass
 
 double moveSpeed = 0.0;         // The current speed of the motors (while moving with moveDistance)
 
@@ -92,8 +120,6 @@ void setup(){
 
   // Start debug serial
   Serial.begin(115200);
-  // Start compass serial
-  Serial1.begin(9600);
 
   // Initialize start button pin as an input
   pinMode(BUTTON_PIN, INPUT);
@@ -102,12 +128,29 @@ void setup(){
   encoderLeftPulses = 0.0;
   encoderRightPulses = 0.0;
   encodersInit();
-  
-  // Initialize PID
 
   // Initialize compass
-  JY901.attach(Serial1);
+  if (!mag.begin()) {
+    Serial.println("Compass (QMC5883P) not found");
+    while (1);
+  }
 
+  mag.setMode(QMC5883P_MODE_NORMAL);
+  mag.setODR(QMC5883P_ODR_50HZ);
+  mag.setOSR(QMC5883P_OSR_4);
+  mag.setRange(QMC5883P_RANGE_8G);
+
+  EEPROM.get(EEPROM_ADDR, cal);
+
+  if (cal.magic != EEPROM_MAGIC) {
+    Serial.println("No calibration data");
+    while (1);
+  }
+
+  //Serial.println("Compass ready");
+
+  // Initialize PID
+  //
   
 }
 
@@ -130,19 +173,15 @@ void loop(){
   lastButtonState = buttonState;
 
   if (beginPath){
-    Serial.print("##### RUNNING ######");
+    //Serial.print("##### RUNNING ######");
 
     // Move into the first square
     //moveDistance(20.0);
 
     // ---------------  Create Path Here  ---------------
-    fw(3);
-    left();
     fw();
-    left();
-    fw(3);
-    left();
-    fw();
+    bw();
+    right();
     left();
 
     // --------------------------------------------------
@@ -153,6 +192,7 @@ void loop(){
     // Stop running the path
     beginPath = false;
   }
+  printDebugInfo();
 }
 
 // Primitives
@@ -178,7 +218,7 @@ void right(){
 void moveDistance(double distance){
 
   // Set encoders
-  encoderEnd = abs(distance * ENCODER_PER_CENTIMETER);
+  encoderEnd = distance * ENCODER_PER_CENTIMETER;
   encoderLeftPulses = 0.0;
   encoderRightPulses = 0.0;
   long avgPulses = 0.0;
@@ -209,14 +249,17 @@ void moveDistance(double distance){
   }
   */
 
-  while (encoderLeftPulses < encoderEnd){ // Wait for the encoders to count to the target pulse count
+  while (abs(encoderLeftPulses) < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
     // Wait
+    
+    /*
     Serial.println("DELTA TIME: " + String(time));
     Serial.println("AVG PULSE: " + String(avgPulses));
     Serial.println("MOVE SPEED: " + String(moveSpeed));
     Serial.println("DISTANCE FROM START: " + String(distanceFromStart));
     Serial.println("ENCODER END: " + String(encoderEnd));
     Serial.println("MIDPOINT SPEED: " + String(midpointSpeed));
+    */
     
     
     time = millis() - initialTime;
@@ -224,31 +267,33 @@ void moveDistance(double distance){
     avgPulses = abs((encoderLeftPulses + encoderRightPulses) / 2.0);
     
     
-    if (avgPulses < (encoderEnd / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
+    if (avgPulses < (abs(encoderEnd) / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
       moveSpeed = constrain(
         MOTOR_SPEED_MIN + ((MOTOR_SPEED_MAX - MOTOR_SPEED_MIN) * time * 0.001),
         MOTOR_SPEED_MIN,
         MOTOR_SPEED_MAX
       );
-      Serial.println("STATE: ACCEL");
+      //Serial.println("STATE: ACCEL");
       distanceFromStart = avgPulses;
-    } else if (avgPulses > (encoderEnd - distanceFromStart) && !accelerate){
+    } else if (avgPulses > (abs(encoderEnd) - distanceFromStart) && !accelerate){
       moveSpeed = constrain(
         midpointSpeed - ((midpointSpeed - 0.0) * time * 0.001),
         0.0,
         MOTOR_SPEED_MAX
       );
-      Serial.println("STATE: DECCEL");
+      //Serial.println("STATE: DECCEL");
     } else {
       initialTime = millis();
       midpointSpeed = moveSpeed;
       accelerate = false;
-      Serial.println("STATE: COAST");
+      //Serial.println("STATE: COAST");
     }
-    Serial.println();
+    //Serial.println();
 
     motorLeft.drive(moveSpeed * MOTOR_SPEED_MULTIPLIER * direction);
     motorRight.drive(moveSpeed * direction);
+
+    printDebugInfo();
     
     
 
@@ -277,6 +322,8 @@ void moveDistance(double distance){
 }
 
 void turnDegrees(double degrees){
+  // Update the heading to the current compass reading
+  readHeading();
 
   // Determine direction of target angle
   int direction;
@@ -285,23 +332,73 @@ void turnDegrees(double degrees){
   } else {
     direction = -1; // Turn to the left
   }
+  //Serial.print("Direciton: ");
+  //Serial.println(direction);
+
+  // Calculate the target heading in the determined direction
+  double targetHeading = heading + degrees;
+
+  //Serial.print("Target Heading: ");
+  //Serial.println(targetHeading);
 
   // Tell motors to drive according to the direction of the angle
   motorLeft.drive(MOTOR_SPEED * MOTOR_SPEED_MULTIPLIER * direction);
   motorRight.drive(MOTOR_SPEED * -direction); // Moves the opposite direction in order to turn
 
-  // ~~~~~~~~~~~~~~~ TODO: Create a reliable way to turn a certain amount of degrees ~~~~~~~~~~~~~~~
-  
-  delay(TURN_TIME); // Wait two seconds (temporary)
+  // Turn until the heading reaches the target heading
+  while (direction * (targetHeading - heading) > TURN_TOLERANCE) {
+    readHeading();
+    printDebugInfo();
+  }
 
   // Stop moving after reaching target angle
   hitBrakes();
+  delay(1000);
 }
 
 void hitBrakes(){
-
   brake(motorLeft,motorRight);
+}
 
+// Compass
+
+void readHeading(){
+  int16_t x, y, z;
+  if (mag.getRawMagnetic(&x, &y, &z)) {
+
+    float xf = (x - cal.offsetX) * cal.scaleX;
+    float yf = (y - cal.offsetY) * cal.scaleY;
+    float zf = (z - cal.offsetZ) * cal.scaleZ;
+
+    compass = atan2(yf, xf) * 180.0 / PI;
+    if (compass < 0) compass += 360;
+  }
+  
+  if (direction_flag == 1 && compass < 180.0){
+    revolutions += 1;
+    direction_flag = 0;
+  } else if (direction_flag == -1 && compass > 180){
+    revolutions -= 1;
+    direction_flag = 0;
+  }
+  if ((compass < 100.0)){
+    direction_flag = -1;
+  } else if ((compass > 260.0)){
+    direction_flag = 1;
+  } else {
+    direction_flag = 0;
+  }
+
+  heading = (revolutions * 360) + compass;
+
+  /*
+  Serial.print("Direction Flag: ");
+  Serial.print(direction_flag);
+  Serial.print(" Heading: ");
+  Serial.print(heading);
+  Serial.print(" Revolutions: ");
+  Serial.println(revolutions);
+  */
 }
 
 // Encoder Functions
@@ -313,8 +410,8 @@ void encodersInit() {
   pinMode(ENCODER_LEFT_PIN_B,INPUT);
   pinMode(ENCODER_RIGHT_PIN_B,INPUT);
 
-  attachInterrupt(2, encoderLeftCounter, CHANGE);
-  attachInterrupt(3, encoderRightCounter, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_LEFT_PIN_B), encoderLeftCounter, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_RIGHT_PIN_B), encoderRightCounter, CHANGE);
 }
 
 void encoderLeftCounter() {
@@ -335,15 +432,17 @@ void encoderLeftCounter() {
   }
   encoderLeftLastState = leftStateA;
 
-  if(encoderLeftDirection)  encoderLeftPulses++; // NOTE: This is opposite of the right encoder since they are inverted
-  else  encoderLeftPulses--;
+  if(encoderLeftDirection)  encoderLeftPulses--; // NOTE: This is opposite of the right encoder since they are inverted
+  else  encoderLeftPulses++;
 }
 
 void encoderRightCounter() {
+
   int rightStateA = digitalRead(ENCODER_RIGHT_PIN_A);
+  int rightStateB;
   if(encoderRightLastState == LOW && rightStateA == HIGH)
   {
-    int rightStateB = digitalRead(ENCODER_RIGHT_PIN_B);
+    rightStateB = digitalRead(ENCODER_RIGHT_PIN_B);
 
     // Check for change in direction
     if (rightStateB == LOW && encoderRightDirection)
@@ -357,6 +456,24 @@ void encoderRightCounter() {
   }
   encoderRightLastState = rightStateA;
 
-  if(encoderRightDirection)  encoderRightPulses--;
-  else  encoderRightPulses++;
+  if(encoderRightDirection)  encoderRightPulses++;
+  else  encoderRightPulses--;
+}
+
+// Debug
+void printDebugInfo(){
+  Serial.println();
+  Serial.print("/*");
+  Serial.print(compass);
+  Serial.print(",");
+  Serial.print(heading);
+  Serial.print(",");
+  Serial.print(revolutions);
+  Serial.print(",");
+  Serial.print(encoderEnd);
+  Serial.print(",");
+  Serial.print(encoderLeftPulses);
+  Serial.print(",");
+  Serial.print(encoderRightPulses);
+  Serial.print("*/");
 }
