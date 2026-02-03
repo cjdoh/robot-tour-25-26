@@ -65,7 +65,8 @@ int encoderRightLastState;
 
 // Variables
 float compass = 0.0;         // Actual reading of the compass module
-double heading = 0.0;         // The current heading (accumulative)
+double heading = 0.0;         // The current heading (approaches the value of trueHeading)
+double trueHeading = 0.0;       // The current heading (accumulative)
 int direction_flag = 0;          // Tracks which region the heading currently is in order to track when heading wraps from 0 to 360
 int revolutions = 0;            // Revolutions
 double targetHeading = 0.0;       // Heading to align with (for moving and turning)
@@ -102,8 +103,6 @@ int buttonState;          // Variable for reading the start button status
 int lastButtonState;          // Variable for reading the previous start button status
 
 double moveSpeed = 0.0;         // The current speed of the motors (while moving with moveDistance)
-
-int state = 0;
 
 bool beginPath = false;         // If set to TRUE, the set movement primitives will run
 
@@ -394,7 +393,10 @@ void readHeading(){
     direction_flag = 0;
   }
 
-  heading = (revolutions * 360) + compass;
+  // Calculates the true accumulative heading
+  trueHeading = (revolutions * 360) + compass; 
+  // Makes heading approach the true heading to reduce jitter
+  heading += (trueHeading-heading) * 0.05;
 }
 
 // Encoder Functions
