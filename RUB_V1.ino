@@ -68,6 +68,7 @@ float compass = 0.0;         // Actual reading of the compass module
 double heading = 0.0;         // The current heading (accumulative)
 int direction_flag = 0;          // Tracks which region the heading currently is in order to track when heading wraps from 0 to 360
 int revolutions = 0;            // Revolutions
+double targetHeading = 0.0;       // Heading to align with (for moving and turning)
 
 // Component
 Adafruit_QMC5883P mag;
@@ -89,10 +90,9 @@ CalData cal;
 
 // ---------------       PID       ---------------
 
-
-// ~~~~~~~~~~~~~~~ TODO: Add PID variables ~~~~~~~~~~~~~~~
-
-
+double motorSpeedOffset = MOTOR_SPEED_MAX;
+double Kp = 1.9, Ki = 1.0, Kd = 0.0;
+PID alignPID(&heading, &motorSpeedOffset, &targetHeading, Kp, Ki, Kd, DIRECT);
 
 // ---------------  Miscellaneous  ---------------
 
@@ -102,6 +102,8 @@ int buttonState;          // Variable for reading the start button status
 int lastButtonState;          // Variable for reading the previous start button status
 
 double moveSpeed = 0.0;         // The current speed of the motors (while moving with moveDistance)
+
+int state = 0;
 
 bool beginPath = false;         // If set to TRUE, the set movement primitives will run
 
@@ -179,7 +181,7 @@ void loop(){
     //moveDistance(20.0);
 
     // ---------------  Create Path Here  ---------------
-    fw();
+    fw(3);
     bw();
     right();
     left();
@@ -192,7 +194,9 @@ void loop(){
     // Stop running the path
     beginPath = false;
   }
+  readHeading();
   printDebugInfo();
+  
 }
 
 // Primitives
@@ -249,7 +253,7 @@ void moveDistance(double distance){
   }
   */
 
-  while (abs(encoderLeftPulses) < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
+  while (avgPulses < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
     // Wait
     
     /*
@@ -288,9 +292,11 @@ void moveDistance(double distance){
       accelerate = false;
       //Serial.println("STATE: COAST");
     }
-    //Serial.println();
 
-    motorLeft.drive(moveSpeed * MOTOR_SPEED_MULTIPLIER * direction);
+    motorSpeedOffset = moveSpeed;
+    alignPID.Compute();
+
+    motorLeft.drive(motorSpeedOffset * MOTOR_SPEED_MULTIPLIER * direction);
     motorRight.drive(moveSpeed * direction);
 
     printDebugInfo();
@@ -319,6 +325,8 @@ void moveDistance(double distance){
   // Stop moving after target distance is reached
   hitBrakes();
 
+  delay(2000);
+
 }
 
 void turnDegrees(double degrees){
@@ -332,14 +340,10 @@ void turnDegrees(double degrees){
   } else {
     direction = -1; // Turn to the left
   }
-  //Serial.print("Direciton: ");
-  //Serial.println(direction);
 
   // Calculate the target heading in the determined direction
-  double targetHeading = heading + degrees;
+  targetHeading = heading + degrees;
 
-  //Serial.print("Target Heading: ");
-  //Serial.println(targetHeading);
 
   // Tell motors to drive according to the direction of the angle
   motorLeft.drive(MOTOR_SPEED * MOTOR_SPEED_MULTIPLIER * direction);
@@ -353,7 +357,8 @@ void turnDegrees(double degrees){
 
   // Stop moving after reaching target angle
   hitBrakes();
-  delay(1000);
+
+  delay(2000);
 }
 
 void hitBrakes(){
@@ -390,15 +395,6 @@ void readHeading(){
   }
 
   heading = (revolutions * 360) + compass;
-
-  /*
-  Serial.print("Direction Flag: ");
-  Serial.print(direction_flag);
-  Serial.print(" Heading: ");
-  Serial.print(heading);
-  Serial.print(" Revolutions: ");
-  Serial.println(revolutions);
-  */
 }
 
 // Encoder Functions
@@ -462,18 +458,23 @@ void encoderRightCounter() {
 
 // Debug
 void printDebugInfo(){
+
+  // Serial Studio
   Serial.println();
   Serial.print("/*");
   Serial.print(compass);
   Serial.print(",");
   Serial.print(heading);
   Serial.print(",");
-  Serial.print(revolutions);
+  Serial.print(targetHeading);
   Serial.print(",");
   Serial.print(encoderEnd);
   Serial.print(",");
   Serial.print(encoderLeftPulses);
   Serial.print(",");
   Serial.print(encoderRightPulses);
+  Serial.print(",");
+  Serial.print(revolutions);
   Serial.print("*/");
+  
 }
