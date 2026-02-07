@@ -2,24 +2,20 @@
 #include <Wire.h>
 #include <PID_v1.h>
 #include <EEPROM.h>
-#include <Adafruit_QMC5883P.h>
-
+#include "JY901.h"
 // ---------------    Parameters   ---------------
 
 const double BLOCK_SIZE = 50.0;          // Length of one grid square (in centimeters)
-const double ENCODER_PER_CENTIMETER = 60.8475;          // Encoder pulses per 1 cm
+const double ENCODER_PER_CENTIMETER = 39.216;          // Encoder pulses per 1 cm
 
 const double MOTOR_SPEED_MIN = 50.0;         // Starting and ending speed of both motors
 const double MOTOR_SPEED_MAX = 220.0;         // Maximum speed of both motors
 
-const double MOTOR_SPEED_MULTIPLIER = 1.13;         // In case one motor is slower than the other, only applies to the left motor
+const double MOTOR_SPEED_MULTIPLIER = 1.04;         // In case one motor is slower than the other, only applies to the left motor
 
 const double MOTOR_SPEED = 100.0;         // Base speed of both motors (DEPRECATED)
 
-const double TURN_TOLERANCE = 0.0;          // The maximum difference between the target heading and heading before completing a turn
-
-//const double TURN_SIZE = 22.38;
-//const double TURN_TIME = 1600;
+const double TURN_TOLERANCE = 5.0;          // The maximum difference between the target heading and heading before completing a turn
 
 // ---------------   Arduino Pins   ---------------
 
@@ -64,36 +60,18 @@ int encoderRightLastState;
 // ---------------     Compass     ---------------
 
 // Variables
-float compass = 0.0;         // Actual reading of the compass module
+double compass = 0.0;         // Actual reading of the compass module
 double heading = 0.0;         // The current heading (approaches the value of trueHeading)
 double trueHeading = 0.0;       // The current heading (accumulative)
 int direction_flag = 0;          // Tracks which region the heading currently is in order to track when heading wraps from 0 to 360
 int revolutions = 0;            // Revolutions
 double targetHeading = 0.0;       // Heading to align with (for moving and turning)
 
-// Component
-Adafruit_QMC5883P mag;
-
-#define EEPROM_MAGIC 0x42
-#define EEPROM_ADDR  0
-
-struct CalData {
-  byte magic;
-  int16_t offsetX;
-  int16_t offsetY;
-  int16_t offsetZ;
-  float scaleX;
-  float scaleY;
-  float scaleZ;
-};
-
-CalData cal;
-
 // ---------------       PID       ---------------
 
-double motorSpeedOffset = MOTOR_SPEED_MAX;
-double Kp = 1.9, Ki = 1.0, Kd = 0.0;
-PID alignPID(&heading, &motorSpeedOffset, &targetHeading, Kp, Ki, Kd, DIRECT);
+double motorSpeedOffset = 0;
+double Kp = 1.0, Ki = 0, Kd = 0.0;
+PID alignPID(&targetHeading, &motorSpeedOffset, &heading, Kp, Ki, Kd, DIRECT);
 
 // ---------------  Miscellaneous  ---------------
 
@@ -121,6 +99,7 @@ void setup(){
 
   // Start debug serial
   Serial.begin(115200);
+	Wire.begin();
 
   // Initialize start button pin as an input
   pinMode(BUTTON_PIN, INPUT);
@@ -131,26 +110,14 @@ void setup(){
   encodersInit();
 
   // Initialize compass
-  if (!mag.begin()) {
-    Serial.println("Compass (QMC5883P) not found");
-    while (1);
-  }
-
-  mag.setMode(QMC5883P_MODE_NORMAL);
-  mag.setODR(QMC5883P_ODR_50HZ);
-  mag.setOSR(QMC5883P_OSR_4);
-  mag.setRange(QMC5883P_RANGE_8G);
-
-  EEPROM.get(EEPROM_ADDR, cal);
-
-  if (cal.magic != EEPROM_MAGIC) {
-    Serial.println("No calibration data");
-    while (1);
-  }
+  JY901.StartIIC();
 
   //Serial.println("Compass ready");
 
   // Initialize PID
+  alignPID.SetOutputLimits(-MOTOR_SPEED_MAX, 240-MOTOR_SPEED_MAX);
+  alignPID.SetSampleTime(100);
+
   //
   
 }
@@ -177,24 +144,55 @@ void loop(){
     //Serial.print("##### RUNNING ######");
 
     // Move into the first square
-    //moveDistance(20.0);
+    moveDistance(20.0);
 
     // ---------------  Create Path Here  ---------------
+    right();
+    fw();
+    left();
     fw(3);
+    bw(2);
+    left();
+    fw(2);
     bw();
     right();
+    fw();
     left();
-
+    fw();
+    right();
+    fw();
+    right();
+    fw();
+    bw();
+    left();
+    left();
+    fw(2);
+    bw();
+    left();
+    fw(3);
+    right();
+    bw();
+    fw(2);
+    right();
+    fw();
+    bw();
+    right();
+    fw();
+    right();
+    bw(2);
     // --------------------------------------------------
 
     // Move dowel to the ending location
-    //moveDistance(5.0);
+    moveDistance(5.0);
 
     // Stop running the path
     beginPath = false;
   }
   readHeading();
   printDebugInfo();
+
+  // Make sure your target heading is aligned wiht your initial heading
+  targetHeading = heading;
   
 }
 
@@ -209,11 +207,11 @@ void bw(double blocks){
 }
 
 void left(){
-  turnDegrees(-90.0);
+  turnDegrees(90.0);
 }
 
 void right(){
-  turnDegrees(90.0);
+  turnDegrees(-90.0);
 }
 
 // Movement Functions
@@ -232,6 +230,9 @@ void moveDistance(double distance){
   long time = 0.0;
 
   boolean accelerate = true;
+
+  // PID
+  alignPID.SetMode(1);
 
   // Determine direction of target distance
   int direction;
@@ -281,7 +282,7 @@ void moveDistance(double distance){
     } else if (avgPulses > (abs(encoderEnd) - distanceFromStart) && !accelerate){
       moveSpeed = constrain(
         midpointSpeed - ((midpointSpeed - 0.0) * time * 0.001),
-        0.0,
+        MOTOR_SPEED_MIN,
         MOTOR_SPEED_MAX
       );
       //Serial.println("STATE: DECCEL");
@@ -291,11 +292,12 @@ void moveDistance(double distance){
       accelerate = false;
       //Serial.println("STATE: COAST");
     }
-
-    motorSpeedOffset = moveSpeed;
+    
+    
+    readHeading();
     alignPID.Compute();
 
-    motorLeft.drive(motorSpeedOffset * MOTOR_SPEED_MULTIPLIER * direction);
+    motorLeft.drive((motorSpeedOffset + moveSpeed) * MOTOR_SPEED_MULTIPLIER * direction);
     motorRight.drive(moveSpeed * direction);
 
     printDebugInfo();
@@ -323,8 +325,9 @@ void moveDistance(double distance){
 
   // Stop moving after target distance is reached
   hitBrakes();
+  alignPID.SetMode(0);
 
-  delay(2000);
+  delay(200);
 
 }
 
@@ -332,24 +335,24 @@ void turnDegrees(double degrees){
   // Update the heading to the current compass reading
   readHeading();
 
-  // Determine direction of target angle
+  // Determine direction of target angle (counterclockwise is positive)
   int direction;
   if (degrees >= 0){
-    direction = 1; // Turn to the right
+    direction = -1; // Turn to the right
   } else {
-    direction = -1; // Turn to the left
+    direction = 1; // Turn to the left
   }
 
   // Calculate the target heading in the determined direction
-  targetHeading = heading + degrees;
-
+  targetHeading = targetHeading + degrees;
+  
 
   // Tell motors to drive according to the direction of the angle
   motorLeft.drive(MOTOR_SPEED * MOTOR_SPEED_MULTIPLIER * direction);
   motorRight.drive(MOTOR_SPEED * -direction); // Moves the opposite direction in order to turn
 
   // Turn until the heading reaches the target heading
-  while (direction * (targetHeading - heading) > TURN_TOLERANCE) {
+  while (direction * (heading - targetHeading) > TURN_TOLERANCE){
     readHeading();
     printDebugInfo();
   }
@@ -357,7 +360,7 @@ void turnDegrees(double degrees){
   // Stop moving after reaching target angle
   hitBrakes();
 
-  delay(2000);
+  delay(200);
 }
 
 void hitBrakes(){
@@ -367,16 +370,8 @@ void hitBrakes(){
 // Compass
 
 void readHeading(){
-  int16_t x, y, z;
-  if (mag.getRawMagnetic(&x, &y, &z)) {
-
-    float xf = (x - cal.offsetX) * cal.scaleX;
-    float yf = (y - cal.offsetY) * cal.scaleY;
-    float zf = (z - cal.offsetZ) * cal.scaleZ;
-
-    compass = atan2(yf, xf) * 180.0 / PI;
-    if (compass < 0) compass += 360;
-  }
+  JY901.GetAngle();
+  compass = 180 + ((double)JY901.stcAngle.Angle[2] / 32768 * 180);
   
   if (direction_flag == 1 && compass < 180.0){
     revolutions += 1;
@@ -394,9 +389,9 @@ void readHeading(){
   }
 
   // Calculates the true accumulative heading
-  trueHeading = (revolutions * 360) + compass; 
-  // Makes heading approach the true heading to reduce jitter
-  heading += (trueHeading-heading) * 0.05;
+  heading = (revolutions * 360) + compass; 
+  // Makes heading approach the true heading to reduce jitter (DEPRECATED WITH CURRENT COMPASS)
+  // heading += (trueHeading-heading) * 0.05;
 }
 
 // Encoder Functions
@@ -477,6 +472,8 @@ void printDebugInfo(){
   Serial.print(encoderRightPulses);
   Serial.print(",");
   Serial.print(revolutions);
+  Serial.print(",");
+  Serial.print(motorSpeedOffset);
   Serial.print("*/");
   
 }
