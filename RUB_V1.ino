@@ -1,7 +1,6 @@
 #include <SparkFun_TB6612.h>
 #include <Wire.h>
 #include <PID_v1.h>
-#include <EEPROM.h>
 #include "JY901.h"
 // ---------------    Parameters   ---------------
 
