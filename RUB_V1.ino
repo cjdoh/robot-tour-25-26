@@ -16,10 +16,6 @@ const double MOTOR_SPEED = 100.0;         // Base speed of both motors (DEPRECAT
 
 const double TURN_TOLERANCE = 5.0;          // The maximum difference between the target heading and heading before completing a turn
 
-//const double TURN_SIZE = 22.38;
-//const double TURN_TIME = 1600;
-
-
 // ---------------   Arduino Pins   ---------------
 
 // Start Button
@@ -70,9 +66,6 @@ int direction_flag = 0;          // Tracks which region the heading currently is
 int revolutions = 0;            // Revolutions
 double targetHeading = 0.0;       // Heading to align with (for moving and turning)
 
-// Component
-
-
 // ---------------       PID       ---------------
 
 double motorSpeedOffset = 0;
@@ -118,7 +111,6 @@ void setup(){
   // Initialize compass
   JY901.StartIIC();
 
-
   //Serial.println("Compass ready");
 
   // Initialize PID
@@ -154,6 +146,10 @@ void loop(){
     moveDistance(20.0);
 
     // ---------------  Create Path Here  ---------------
+    /*
+    turnDegrees(90);
+    fw(100);
+    */
     right();
     fw();
     left();
@@ -304,7 +300,7 @@ void moveDistance(double distance){
     readHeading();
     alignPID.Compute();
 
-    motorLeft.drive((motorSpeedOffset * direction + moveSpeed) * (pow(MOTOR_SPEED_MULTIPLIER, direction)) * direction);
+    motorLeft.drive((motorSpeedOffset + moveSpeed) * MOTOR_SPEED_MULTIPLIER * direction);
     motorRight.drive(moveSpeed * direction);
 
     printDebugInfo();
