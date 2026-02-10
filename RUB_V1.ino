@@ -10,11 +10,11 @@ const double ENCODER_PER_CENTIMETER = 39.216;          // Encoder pulses per 1 c
 const double MOTOR_SPEED_MIN = 50.0;         // Starting and ending speed of both motors
 const double MOTOR_SPEED_MAX = 220.0;         // Maximum speed of both motors
 
-const double MOTOR_SPEED_MULTIPLIER = 1.04;         // In case one motor is slower than the other, only applies to the left motor
+const double MOTOR_SPEED_MULTIPLIER = 1.02;         // In case one motor is slower than the other, only applies to the left motor
 
 const double MOTOR_SPEED = 100.0;         // Base speed of both motors (DEPRECATED)
 
-const double TURN_TOLERANCE = 5.0;          // The maximum difference between the target heading and heading before completing a turn
+const double TURN_TOLERANCE = 4.6;          // The maximum difference between the target heading and heading before completing a turn
 
 // ---------------   Arduino Pins   ---------------
 
@@ -87,6 +87,8 @@ unsigned long previousMillis = millis();          // Variable that holds the pre
 
 void fw(double blocks = 1.0);         // Instantiate primitives to allow for 
 void bw(double blocks = 1.0);         // a default parameter of 1 block
+void left(double turns = 1.0);         // Instantiate primitives to allow for 
+void right(double turns = 1.0);         // a default parameter of 1 block
 
 // -----------------------------------------------
 
@@ -145,44 +147,57 @@ void loop(){
     // Move into the first square
     moveDistance(20.0);
 
-    // ---------------  Create Path Here  ---------------
+    // ---------------  Create Path Here  ---------------;
     /*
-    turnDegrees(90);
-    fw(100);
+    fw(1.5);
+    right(2);
+    fw();
+    
     */
+    fw();
     right();
     fw();
+    right();
+    fw();
+    bw();
+    right();
+    fw(2);
+    right(2);
+    fw(2);
     left();
-    fw(3);
+    fw(2);
     bw(2);
     left();
     fw(2);
-    bw();
-    right();
-    fw();
-    left();
-    fw();
-    right();
-    fw();
     right();
     fw();
     bw();
     left();
+    fw(1.5);
+    right(2);
+    fw(0.5);
+    right();
+    fw();
+    left();
+    fw();
+    bw(2);
+    fw();
+    left();
+    fw();
+    left();
+    fw();
+    right();
+    fw(2);
+    right();
+    fw(1.5);
+    right(2);
+    fw(1.5);
     left();
     fw(2);
-    bw();
     left();
     fw(3);
-    right();
-    bw();
-    fw(2);
-    right();
+    left();
     fw();
-    bw();
-    right();
-    fw();
-    right();
-    bw(2);
     // --------------------------------------------------
 
     // Move dowel to the ending location
@@ -209,12 +224,12 @@ void bw(double blocks){
   moveDistance(-blocks * BLOCK_SIZE);
 }
 
-void left(){
-  turnDegrees(90.0);
+void left(double turns){
+  turnDegrees(90.0 * turns);
 }
 
-void right(){
-  turnDegrees(-90.0);
+void right(double turns){
+  turnDegrees(-90.0 * turns);
 }
 
 // Movement Functions
@@ -299,9 +314,17 @@ void moveDistance(double distance){
     
     readHeading();
     alignPID.Compute();
-
-    motorLeft.drive((motorSpeedOffset + moveSpeed) * MOTOR_SPEED_MULTIPLIER * direction);
-    motorRight.drive(moveSpeed * direction);
+    double leftSpeed;
+    double rightSpeed;
+    if (direction == 1) {
+      leftSpeed = (motorSpeedOffset + moveSpeed);
+      rightSpeed = moveSpeed;
+    } else {
+      leftSpeed = moveSpeed;
+      rightSpeed = (motorSpeedOffset + moveSpeed);
+    }
+    motorLeft.drive(leftSpeed * MOTOR_SPEED_MULTIPLIER * direction);
+    motorRight.drive(rightSpeed * direction);
 
     printDebugInfo();
     
