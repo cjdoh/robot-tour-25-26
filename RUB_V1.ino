@@ -1,7 +1,5 @@
 #include <SparkFun_TB6612.h>
 #include <Wire.h>
-#include <PID_v1.h>
-#include "JY901.h"
 // ---------------    Parameters   ---------------
 
 const double BLOCK_SIZE = 50.0;          // Length of one grid square (in centimeters)
@@ -14,7 +12,7 @@ const double MOTOR_SPEED_MULTIPLIER = 1.02;         // In case one motor is slow
 
 const double MOTOR_SPEED = 100.0;         // Base speed of both motors (DEPRECATED)
 
-const double TURN_TOLERANCE = 4.6;          // The maximum difference between the target heading and heading before completing a turn
+const double TURN_TIME = 1000;          // Turn time in milliseconds
 
 // ---------------   Arduino Pins   ---------------
 
@@ -68,9 +66,7 @@ double targetHeading = 0.0;       // Heading to align with (for moving and turni
 
 // ---------------       PID       ---------------
 
-double motorSpeedOffset = 0;
-double Kp = 1.0, Ki = 0, Kd = 0.0;
-PID alignPID(&targetHeading, &motorSpeedOffset, &heading, Kp, Ki, Kd, DIRECT);
+// not working for gold team
 
 // ---------------  Miscellaneous  ---------------
 
@@ -109,16 +105,6 @@ void setup(){
   encoderLeftPulses = 0.0;
   encoderRightPulses = 0.0;
   encodersInit();
-
-  // Initialize compass
-  JY901.StartIIC();
-
-  //Serial.println("Compass ready");
-
-  // Initialize PID
-  alignPID.SetOutputLimits(-MOTOR_SPEED_MAX, 240-MOTOR_SPEED_MAX);
-  alignPID.SetSampleTime(100);
-
   //
   
 }
@@ -145,15 +131,18 @@ void loop(){
     //Serial.print("##### RUNNING ######");
 
     // Move into the first square
-    moveDistance(20.0);
+    //moveDistance(20.0);
 
     // ---------------  Create Path Here  ---------------;
-    /*
-    fw(1.5);
-    right(2);
-    fw();
     
-    */
+    right();
+    right();
+    right();
+    right();
+    right(4);
+    left(4);
+    
+    /*
     fw();
     right();
     fw();
@@ -198,15 +187,15 @@ void loop(){
     fw(3);
     left();
     fw();
+    */
     // --------------------------------------------------
 
     // Move dowel to the ending location
-    moveDistance(5.0);
+    //moveDistance(5.0);
 
     // Stop running the path
     beginPath = false;
   }
-  readHeading();
   printDebugInfo();
 
   // Make sure your target heading is aligned wiht your initial heading
@@ -250,7 +239,6 @@ void moveDistance(double distance){
   boolean accelerate = true;
 
   // PID
-  alignPID.SetMode(1);
 
   // Determine direction of target distance
   int direction;
@@ -312,19 +300,8 @@ void moveDistance(double distance){
     }
     
     
-    readHeading();
-    alignPID.Compute();
-    double leftSpeed;
-    double rightSpeed;
-    if (direction == 1) {
-      leftSpeed = (motorSpeedOffset + moveSpeed);
-      rightSpeed = moveSpeed;
-    } else {
-      leftSpeed = moveSpeed;
-      rightSpeed = (motorSpeedOffset + moveSpeed);
-    }
-    motorLeft.drive(leftSpeed * MOTOR_SPEED_MULTIPLIER * direction);
-    motorRight.drive(rightSpeed * direction);
+    motorLeft.drive(MOTOR_SPEED * MOTOR_SPEED_MULTIPLIER * direction);
+    motorRight.drive(MOTOR_SPEED * direction);
 
     printDebugInfo();
     
@@ -351,7 +328,6 @@ void moveDistance(double distance){
 
   // Stop moving after target distance is reached
   hitBrakes();
-  alignPID.SetMode(0);
 
   delay(200);
 
@@ -359,7 +335,6 @@ void moveDistance(double distance){
 
 void turnDegrees(double degrees){
   // Update the heading to the current compass reading
-  readHeading();
 
   // Determine direction of target angle (counterclockwise is positive)
   int direction;
@@ -378,10 +353,7 @@ void turnDegrees(double degrees){
   motorRight.drive(MOTOR_SPEED * -direction); // Moves the opposite direction in order to turn
 
   // Turn until the heading reaches the target heading
-  while (direction * (heading - targetHeading) > TURN_TOLERANCE){
-    readHeading();
-    printDebugInfo();
-  }
+  delay(TURN_TIME);
 
   // Stop moving after reaching target angle
   hitBrakes();
@@ -394,31 +366,6 @@ void hitBrakes(){
 }
 
 // Compass
-
-void readHeading(){
-  JY901.GetAngle();
-  compass = 180 + ((double)JY901.stcAngle.Angle[2] / 32768 * 180);
-  
-  if (direction_flag == 1 && compass < 180.0){
-    revolutions += 1;
-    direction_flag = 0;
-  } else if (direction_flag == -1 && compass > 180){
-    revolutions -= 1;
-    direction_flag = 0;
-  }
-  if ((compass < 100.0)){
-    direction_flag = -1;
-  } else if ((compass > 260.0)){
-    direction_flag = 1;
-  } else {
-    direction_flag = 0;
-  }
-
-  // Calculates the true accumulative heading
-  heading = (revolutions * 360) + compass; 
-  // Makes heading approach the true heading to reduce jitter (DEPRECATED WITH CURRENT COMPASS)
-  // heading += (trueHeading-heading) * 0.05;
-}
 
 // Encoder Functions
 
@@ -498,8 +445,8 @@ void printDebugInfo(){
   Serial.print(encoderRightPulses);
   Serial.print(",");
   Serial.print(revolutions);
-  Serial.print(",");
-  Serial.print(motorSpeedOffset);
+  //Serial.print(",");
+  //Serial.print(motorSpeedOffset);
   Serial.print("*/");
   
 }
