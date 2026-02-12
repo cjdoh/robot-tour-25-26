@@ -16,6 +16,9 @@ const double MOTOR_SPEED = 100.0;         // Base speed of both motors (DEPRECAT
 
 const double TURN_TOLERANCE = 4.6;          // The maximum difference between the target heading and heading before completing a turn
 
+double headingAdjustment = 0;
+double bump = 21.0/43;
+
 // ---------------   Arduino Pins   ---------------
 
 // Start Button
@@ -69,7 +72,7 @@ double targetHeading = 0.0;       // Heading to align with (for moving and turni
 // ---------------       PID       ---------------
 
 double motorSpeedOffset = 0;
-double Kp = 1.0, Ki = 0, Kd = 0.0;
+double Kp = 1.5, Ki = 0, Kd = 0.0;
 PID alignPID(&targetHeading, &motorSpeedOffset, &heading, Kp, Ki, Kd, DIRECT);
 
 // ---------------  Miscellaneous  ---------------
@@ -151,49 +154,93 @@ void loop(){
     
     // MIT
     fw();
+    headingAdjustment -= bump;
     right();
+    headingAdjustment -= bump;
     fw();
+    headingAdjustment -= bump;
     right();
+    headingAdjustment -= bump;
     fw();
+    headingAdjustment -= bump;
     bw();
+    headingAdjustment -= bump;
     right();
+    headingAdjustment -= bump;
     fw(2);
+    headingAdjustment -= bump;
     left(2);
+    headingAdjustment -= bump;
     fw(2);
+    headingAdjustment -= bump;
     left();
+    headingAdjustment -= bump;
     fw(2);
+    headingAdjustment -= bump;
     bw(2);
+    headingAdjustment -= bump;
     left();
+    headingAdjustment -= bump;
     fw(2);
+    headingAdjustment -= bump;
     right();
+    headingAdjustment -= bump;
     fw();
+    headingAdjustment -= bump;
     bw();
+    headingAdjustment -= bump;
     left();
+    headingAdjustment -= bump;
     fw(1.5);
+    headingAdjustment -= bump;
     right(2);
+    headingAdjustment -= bump;
     fw(0.5);
+    headingAdjustment -= bump;
     right();
+    headingAdjustment -= bump;
     fw();
+    headingAdjustment -= bump;
     left();
+    headingAdjustment -= bump;
     fw();
+    headingAdjustment -= bump;
     bw(2);
+    headingAdjustment -= bump;
     fw();
+    headingAdjustment -= bump;
     left();
+    headingAdjustment -= bump;
     fw();
+    headingAdjustment -= bump;
     left();
+    headingAdjustment -= bump;
     fw();
+    headingAdjustment -= bump;
     right();
+    headingAdjustment -= bump;
     fw(2);
+    headingAdjustment -= bump;
     right();
+    headingAdjustment -= bump;
     fw(1.5);
+    headingAdjustment -= bump;
     left(2);
+    headingAdjustment -= bump;
     fw(1.5);
+    headingAdjustment -= bump;
     left();
+    headingAdjustment -= bump;
     fw(2);
+    headingAdjustment -= bump;
     left();
+    headingAdjustment -= bump;
     fw(3);
+    headingAdjustment -= bump;
     left();
+    headingAdjustment -= bump;
     fw();
+
 
     // --------------------------------------------------
 
@@ -237,7 +284,7 @@ void moveDistance(double distance){
   encoderEnd = distance * ENCODER_PER_CENTIMETER;
   encoderLeftPulses = 0.0;
   encoderRightPulses = 0.0;
-  long avgPulses = 0.0;
+  long maxPulses = 0.0;
   long distanceFromStart = 0.0;
   double midpointSpeed = 0.0;
 
@@ -268,7 +315,7 @@ void moveDistance(double distance){
   }
   */
 
-  while (avgPulses < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
+  while (maxPulses < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
     // Wait
     
     /*
@@ -283,18 +330,18 @@ void moveDistance(double distance){
     
     time = millis() - initialTime;
 
-    avgPulses = abs((encoderLeftPulses + encoderRightPulses) / 2.0);
+    maxPulses = max(abs(encoderLeftPulses),abs(encoderRightPulses));
     
     
-    if (avgPulses < (abs(encoderEnd) / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
+    if (maxPulses < (abs(encoderEnd) / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
       moveSpeed = constrain(
         MOTOR_SPEED_MIN + ((MOTOR_SPEED_MAX - MOTOR_SPEED_MIN) * time * 0.001),
         MOTOR_SPEED_MIN,
         MOTOR_SPEED_MAX
       );
       //Serial.println("STATE: ACCEL");
-      distanceFromStart = avgPulses;
-    } else if (avgPulses > (abs(encoderEnd) - distanceFromStart) && !accelerate){
+      distanceFromStart = maxPulses;
+    } else if (maxPulses > (abs(encoderEnd) - distanceFromStart) && !accelerate){
       moveSpeed = constrain(
         midpointSpeed - ((midpointSpeed - 0.0) * time * 0.001),
         MOTOR_SPEED_MIN,
@@ -308,7 +355,6 @@ void moveDistance(double distance){
       //Serial.println("STATE: COAST");
     }
     
-    
     readHeading();
     alignPID.Compute();
     double leftSpeed;
@@ -317,7 +363,7 @@ void moveDistance(double distance){
       leftSpeed = (motorSpeedOffset + moveSpeed);
       rightSpeed = moveSpeed;
     } else {
-      leftSpeed = moveSpeed;
+      leftSpeed = moveSpeed - 7;
       rightSpeed = (motorSpeedOffset + moveSpeed);
     }
     motorLeft.drive(leftSpeed * MOTOR_SPEED_MULTIPLIER * direction);
@@ -394,18 +440,18 @@ void hitBrakes(){
 
 void readHeading(){
   JY901.GetAngle();
-  compass = 180 + ((double)JY901.stcAngle.Angle[2] / 32768 * 180);
+  compass = 180 + ((double)JY901.stcAngle.Angle[2] / 32768 * 180) + headingAdjustment;
   
-  if (direction_flag == 1 && compass < 180.0){
+  if ((direction_flag == 1) && (compass < 180.0)){
     revolutions += 1;
     direction_flag = 0;
-  } else if (direction_flag == -1 && compass > 180){
+  } else if ((direction_flag == -1) && (compass > 180)){
     revolutions -= 1;
     direction_flag = 0;
   }
-  if ((compass < 100.0)){
+  if (compass < 100.0){
     direction_flag = -1;
-  } else if ((compass > 260.0)){
+  } else if (compass > 260.0){
     direction_flag = 1;
   } else {
     direction_flag = 0;
