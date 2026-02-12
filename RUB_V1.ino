@@ -148,12 +148,8 @@ void loop(){
     moveDistance(20.0);
 
     // ---------------  Create Path Here  ---------------;
-    /*
-    fw(1.5);
-    right(2);
-    fw();
     
-    */
+    // MIT
     fw();
     right();
     fw();
@@ -162,7 +158,7 @@ void loop(){
     bw();
     right();
     fw(2);
-    right(2);
+    left(2);
     fw(2);
     left();
     fw(2);
@@ -190,7 +186,7 @@ void loop(){
     fw(2);
     right();
     fw(1.5);
-    right(2);
+    left(2);
     fw(1.5);
     left();
     fw(2);
@@ -198,6 +194,7 @@ void loop(){
     fw(3);
     left();
     fw();
+
     // --------------------------------------------------
 
     // Move dowel to the ending location
