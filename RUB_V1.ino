@@ -14,10 +14,17 @@ const double MOTOR_SPEED_MULTIPLIER = 1.02;         // In case one motor is slow
 
 const double MOTOR_SPEED = 100.0;         // Base speed of both motors (DEPRECATED)
 
-const double TURN_TOLERANCE = 4.6;          // The maximum difference between the target heading and heading before completing a turn
+const double TURN_TOLERANCE = 5.0;          // The maximum difference between the target heading and heading before completing a turn
 
-double headingAdjustment = 0;
-double bump = 21.0/43;
+const double TURN_TIME_LEFT = 1190.0;
+const double TURN_TIME_RIGHT = 1200.0;
+
+// ---------------     Settings     ---------------
+
+boolean TOGGLE_SLOW_TURN = false;
+boolean TOGGLE_PID = false;
+boolean TOGGLE_TIME_TURN = true;
+boolean TOGGLE_TIME_MOVE = false;
 
 // ---------------   Arduino Pins   ---------------
 
@@ -72,7 +79,7 @@ double targetHeading = 0.0;       // Heading to align with (for moving and turni
 // ---------------       PID       ---------------
 
 double motorSpeedOffset = 0;
-double Kp = 1.5, Ki = 0, Kd = 0.0;
+double Kp = 1.0, Ki = 0, Kd = 0.0;
 PID alignPID(&targetHeading, &motorSpeedOffset, &heading, Kp, Ki, Kd, DIRECT);
 
 // ---------------  Miscellaneous  ---------------
@@ -90,8 +97,6 @@ unsigned long previousMillis = millis();          // Variable that holds the pre
 
 void fw(double blocks = 1.0);         // Instantiate primitives to allow for 
 void bw(double blocks = 1.0);         // a default parameter of 1 block
-void left(double turns = 1.0);         // Instantiate primitives to allow for 
-void right(double turns = 1.0);         // a default parameter of 1 block
 
 // -----------------------------------------------
 
@@ -145,103 +150,89 @@ void loop(){
   lastButtonState = buttonState;
 
   if (beginPath){
-    //Serial.print("##### RUNNING ######");
-
+   
     // Move into the first square
+    
     moveDistance(20.0);
 
-    // ---------------  Create Path Here  ---------------;
-    
-    // MIT
+    // ---------------  Create Path Here  ---------------
+	/*
     fw();
-    headingAdjustment -= bump;
     right();
-    headingAdjustment -= bump;
     fw();
-    headingAdjustment -= bump;
-    right();
-    headingAdjustment -= bump;
+    left();
     fw();
-    headingAdjustment -= bump;
+    left();
+    fw();
     bw();
-    headingAdjustment -= bump;
     right();
-    headingAdjustment -= bump;
-    fw(2);
-    headingAdjustment -= bump;
-    left(2);
-    headingAdjustment -= bump;
-    fw(2);
-    headingAdjustment -= bump;
-    left();
-    headingAdjustment -= bump;
-    fw(2);
-    headingAdjustment -= bump;
-    bw(2);
-    headingAdjustment -= bump;
-    left();
-    headingAdjustment -= bump;
-    fw(2);
-    headingAdjustment -= bump;
-    right();
-    headingAdjustment -= bump;
-    fw();
-    headingAdjustment -= bump;
     bw();
-    headingAdjustment -= bump;
-    left();
-    headingAdjustment -= bump;
-    fw(1.5);
-    headingAdjustment -= bump;
-    right(2);
-    headingAdjustment -= bump;
-    fw(0.5);
-    headingAdjustment -= bump;
     right();
-    headingAdjustment -= bump;
-    fw();
-    headingAdjustment -= bump;
-    left();
-    headingAdjustment -= bump;
-    fw();
-    headingAdjustment -= bump;
-    bw(2);
-    headingAdjustment -= bump;
-    fw();
-    headingAdjustment -= bump;
-    left();
-    headingAdjustment -= bump;
-    fw();
-    headingAdjustment -= bump;
-    left();
-    headingAdjustment -= bump;
-    fw();
-    headingAdjustment -= bump;
-    right();
-    headingAdjustment -= bump;
-    fw(2);
-    headingAdjustment -= bump;
-    right();
-    headingAdjustment -= bump;
-    fw(1.5);
-    headingAdjustment -= bump;
-    left(2);
-    headingAdjustment -= bump;
-    fw(1.5);
-    headingAdjustment -= bump;
-    left();
-    headingAdjustment -= bump;
-    fw(2);
-    headingAdjustment -= bump;
-    left();
-    headingAdjustment -= bump;
     fw(3);
-    headingAdjustment -= bump;
-    left();
-    headingAdjustment -= bump;
+    right();
     fw();
+    bw();
+    left();
+    left();
+    fw(2);
+    left();
+    fw();
+    right();
+    right();
+    bw();
+    right();
+    fw(3);
+    right();
+    fw();
+    bw();
+    left();
+    left();
+    left();
+    fw(2);
+    right();
+    fw();
+	*/
+    
+
+    
+    
 
 
+    /*
+    right();
+    fw();
+    left();
+    fw(3);
+    bw(2);
+    left();
+    fw(2);
+    bw();
+    right();
+    fw();
+    left();
+    fw();
+    right();
+    fw();
+    right();
+    fw();
+    bw();
+    left();
+    left();
+    fw(2);
+    bw();
+    left();
+    fw(3);
+    right();
+    bw();
+    fw(2);
+    right();
+    fw();
+    bw();
+    right();
+    fw();
+    right();
+    bw(2);
+    */
     // --------------------------------------------------
 
     // Move dowel to the ending location
@@ -268,12 +259,12 @@ void bw(double blocks){
   moveDistance(-blocks * BLOCK_SIZE);
 }
 
-void left(double turns){
-  turnDegrees(90.0 * turns);
+void left(){
+  turnDegrees(90.0);
 }
 
-void right(double turns){
-  turnDegrees(-90.0 * turns);
+void right(){
+  turnDegrees(-90.0);
 }
 
 // Movement Functions
@@ -284,7 +275,7 @@ void moveDistance(double distance){
   encoderEnd = distance * ENCODER_PER_CENTIMETER;
   encoderLeftPulses = 0.0;
   encoderRightPulses = 0.0;
-  long maxPulses = 0.0;
+  long avgPulses = 0.0;
   long distanceFromStart = 0.0;
   double midpointSpeed = 0.0;
 
@@ -304,18 +295,8 @@ void moveDistance(double distance){
     direction = -1; // Target is behind
   }
 
-  // Tell motors to drive in the direction of the target distance
-  //motorLeft.drive(MOTOR_SPEED * MOTOR_SPEED_MULTIPLIER * direction);
-  //motorRight.drive(MOTOR_SPEED * direction);
 
-  /*
-  for (double i = 1.0; MOTOR_SPEED_MIN + i < MOTOR_SPEED_MAX; i += 1) {
-    motorLeft.drive((i + MOTOR_SPEED_MIN) * MOTOR_SPEED_MULTIPLIER * direction);
-    motorRight.drive((i + MOTOR_SPEED_MIN) * direction, 5);
-  }
-  */
-
-  while (maxPulses < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
+  while (avgPulses < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
     // Wait
     
     /*
@@ -330,18 +311,18 @@ void moveDistance(double distance){
     
     time = millis() - initialTime;
 
-    maxPulses = max(abs(encoderLeftPulses),abs(encoderRightPulses));
+    avgPulses = abs((encoderLeftPulses + encoderRightPulses) / 2.0);
     
     
-    if (maxPulses < (abs(encoderEnd) / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
+    if (avgPulses < (abs(encoderEnd) / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
       moveSpeed = constrain(
         MOTOR_SPEED_MIN + ((MOTOR_SPEED_MAX - MOTOR_SPEED_MIN) * time * 0.001),
         MOTOR_SPEED_MIN,
         MOTOR_SPEED_MAX
       );
       //Serial.println("STATE: ACCEL");
-      distanceFromStart = maxPulses;
-    } else if (maxPulses > (abs(encoderEnd) - distanceFromStart) && !accelerate){
+      distanceFromStart = avgPulses;
+    } else if (avgPulses > (abs(encoderEnd) - distanceFromStart) && !accelerate){
       moveSpeed = constrain(
         midpointSpeed - ((midpointSpeed - 0.0) * time * 0.001),
         MOTOR_SPEED_MIN,
@@ -355,42 +336,29 @@ void moveDistance(double distance){
       //Serial.println("STATE: COAST");
     }
     
+    
     readHeading();
-    alignPID.Compute();
-    double leftSpeed;
-    double rightSpeed;
-    if (direction == 1) {
-      leftSpeed = (motorSpeedOffset + moveSpeed);
-      rightSpeed = moveSpeed;
+    if (TOGGLE_PID){
+      alignPID.Compute();
     } else {
-      leftSpeed = moveSpeed - 7;
-      rightSpeed = (motorSpeedOffset + moveSpeed);
+      motorSpeedOffset = 0.0;
     }
-    motorLeft.drive(leftSpeed * MOTOR_SPEED_MULTIPLIER * direction);
-    motorRight.drive(rightSpeed * direction);
+
+    if (TOGGLE_TIME_MOVE){
+      moveSpeed = MOTOR_SPEED;
+      motorSpeedOffset = 0.0;
+    }
+
+
+    motorLeft.drive((motorSpeedOffset + moveSpeed) * MOTOR_SPEED_MULTIPLIER * direction);
+    motorRight.drive(moveSpeed * direction);
 
     printDebugInfo();
     
     
 
-    // ~~~~~~~~~~~~~~~ TODO: Fix the PID / keep the robot moving straight without relying on the initial angle of the robot ~~~~~~~~~~~~~~~
+    
   }
-
-  /*
-
-    for (double i = 1.0; MOTOR_SPEED_MAX - i > MOTOR_SPEED_MIN && abs(encoderLeftPulses) < encoderEnd && abs(encoderRightPulses) < encoderEnd; i += 1) {
-    motorLeft.drive((MOTOR_SPEED_MAX - i) * MOTOR_SPEED_MULTIPLIER * direction);
-    motorRight.drive((MOTOR_SPEED_MAX - i) * direction, 5);
-  }
-
-  while (abs(encoderLeftPulses) < encoderEnd - 1000 && abs(encoderRightPulses) < encoderEnd - 1000){ // Wait for the encoders to count to the target pulse count
-    // Wait
-    Serial.println(encoderLeftPulses);
-
-    // ~~~~~~~~~~~~~~~ TODO: Fix the PID / keep the robot moving straight without relying on the initial angle of the robot ~~~~~~~~~~~~~~~
-
-  }
-  */
 
   // Stop moving after target distance is reached
   hitBrakes();
@@ -407,9 +375,9 @@ void turnDegrees(double degrees){
   // Determine direction of target angle (counterclockwise is positive)
   int direction;
   if (degrees >= 0){
-    direction = -1; // Turn to the right
+    direction = -1; // Turn to the left
   } else {
-    direction = 1; // Turn to the left
+    direction = 1; // Turn to the right
   }
 
   // Calculate the target heading in the determined direction
@@ -421,9 +389,18 @@ void turnDegrees(double degrees){
   motorRight.drive(MOTOR_SPEED * -direction); // Moves the opposite direction in order to turn
 
   // Turn until the heading reaches the target heading
-  while (direction * (heading - targetHeading) > TURN_TOLERANCE){
-    readHeading();
-    printDebugInfo();
+  if (TOGGLE_TIME_TURN){
+    if (direction == 1){
+      delay(TURN_TIME_RIGHT);
+    } else {
+      delay(TURN_TIME_LEFT);
+    }
+    
+  } else {
+    while (direction * (heading - targetHeading) > TURN_TOLERANCE){
+      readHeading();
+      printDebugInfo();
+    }
   }
 
   // Stop moving after reaching target angle
@@ -440,18 +417,18 @@ void hitBrakes(){
 
 void readHeading(){
   JY901.GetAngle();
-  compass = 180 + ((double)JY901.stcAngle.Angle[2] / 32768 * 180) + headingAdjustment;
+  compass = 180 + ((double)JY901.stcAngle.Angle[2] / 32768 * 180);
   
-  if ((direction_flag == 1) && (compass < 180.0)){
+  if (direction_flag == 1 && compass < 180.0){
     revolutions += 1;
     direction_flag = 0;
-  } else if ((direction_flag == -1) && (compass > 180)){
+  } else if (direction_flag == -1 && compass > 180){
     revolutions -= 1;
     direction_flag = 0;
   }
-  if (compass < 100.0){
+  if ((compass < 100.0)){
     direction_flag = -1;
-  } else if (compass > 260.0){
+  } else if ((compass > 260.0)){
     direction_flag = 1;
   } else {
     direction_flag = 0;
@@ -459,8 +436,6 @@ void readHeading(){
 
   // Calculates the true accumulative heading
   heading = (revolutions * 360) + compass; 
-  // Makes heading approach the true heading to reduce jitter (DEPRECATED WITH CURRENT COMPASS)
-  // heading += (trueHeading-heading) * 0.05;
 }
 
 // Encoder Functions
