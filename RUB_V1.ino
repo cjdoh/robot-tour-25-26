@@ -275,7 +275,7 @@ void moveDistance(double distance){
   encoderEnd = distance * ENCODER_PER_CENTIMETER;
   encoderLeftPulses = 0.0;
   encoderRightPulses = 0.0;
-  long avgPulses = 0.0;
+  long maxPulses = 0.0;
   long distanceFromStart = 0.0;
   double midpointSpeed = 0.0;
 
@@ -296,7 +296,7 @@ void moveDistance(double distance){
   }
 
 
-  while (avgPulses < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
+  while (maxPulses < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
     // Wait
     
     /*
@@ -311,18 +311,18 @@ void moveDistance(double distance){
     
     time = millis() - initialTime;
 
-    avgPulses = abs((encoderLeftPulses + encoderRightPulses) / 2.0);
+    maxPulses = max(abs(encoderLeftPulses),abs(encoderRightPulses));
     
     
-    if (avgPulses < (abs(encoderEnd) / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
+    if (maxPulses < (abs(encoderEnd) / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
       moveSpeed = constrain(
         MOTOR_SPEED_MIN + ((MOTOR_SPEED_MAX - MOTOR_SPEED_MIN) * time * 0.001),
         MOTOR_SPEED_MIN,
         MOTOR_SPEED_MAX
       );
       //Serial.println("STATE: ACCEL");
-      distanceFromStart = avgPulses;
-    } else if (avgPulses > (abs(encoderEnd) - distanceFromStart) && !accelerate){
+      distanceFromStart = maxPulses;
+    } else if (maxPulses > (abs(encoderEnd) - distanceFromStart) && !accelerate){
       moveSpeed = constrain(
         midpointSpeed - ((midpointSpeed - 0.0) * time * 0.001),
         MOTOR_SPEED_MIN,
@@ -335,7 +335,6 @@ void moveDistance(double distance){
       accelerate = false;
       //Serial.println("STATE: COAST");
     }
-    
     
     readHeading();
     if (TOGGLE_PID){
@@ -419,16 +418,16 @@ void readHeading(){
   JY901.GetAngle();
   compass = 180 + ((double)JY901.stcAngle.Angle[2] / 32768 * 180);
   
-  if (direction_flag == 1 && compass < 180.0){
+  if ((direction_flag == 1) && (compass < 180.0)){
     revolutions += 1;
     direction_flag = 0;
-  } else if (direction_flag == -1 && compass > 180){
+  } else if ((direction_flag == -1) && (compass > 180)){
     revolutions -= 1;
     direction_flag = 0;
   }
-  if ((compass < 100.0)){
+  if (compass < 100.0){
     direction_flag = -1;
-  } else if ((compass > 260.0)){
+  } else if (compass > 260.0){
     direction_flag = 1;
   } else {
     direction_flag = 0;
