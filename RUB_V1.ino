@@ -245,9 +245,10 @@ void loop(){
   printDebugInfo();
 
   // Make sure your target heading is aligned wiht your initial heading
-  targetHeading = heading;
-  
-}
+ if(!beginPath){ 
+	 targetHeading = heading;
+ }
+
 
 // Primitives
 
