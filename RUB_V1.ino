@@ -80,7 +80,7 @@ double targetHeading = 0.0;       // Heading to align with (for moving and turni
 
 double motorSpeedOffset = 0;
 double Kp = 1.0, Ki = 0, Kd = 0.0;
-PID alignPID(&targetHeading, &motorSpeedOffset, &heading, Kp, Ki, Kd, DIRECT);
+PID alignPID(&heading, &motorSpeedOffset, &targetHeading Kp, Ki, Kd, DIRECT);
 
 // ---------------  Miscellaneous  ---------------
 
