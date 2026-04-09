@@ -4,15 +4,27 @@
 #include "JY901.h"
 // ---------------    Parameters   ---------------
 
+// ~~~~~~~~~
+const double TARGET_TIME = 1000.0;          // How much time should it take to travel the whole path (in milliseconds)
+const char PATH[] =
+"f3"
+"b3"
+"r3"
+;
+// ~~~~~~~~~~
+
+// PARAMETERS OPTIMIZED FOR: ≈11.20 V (across both battery packs)
+
 const double BLOCK_SIZE = 50.0;          // Length of one grid square (in centimeters)
-const double ENCODER_PER_CENTIMETER = 39.216;          // Encoder pulses per 1 cm
+const double ENCODER_PER_CENTIMETER = 38.60784314;          // Encoder pulses per 1 cm
 
 const double MOTOR_SPEED_MIN = 50.0;         // Starting and ending speed of both motors
 const double MOTOR_SPEED_MAX = 220.0;         // Maximum speed of both motors
 
-const double MOTOR_SPEED_MULTIPLIER = 1.02;         // In case one motor is slower than the other, only applies to the left motor
+const double FW_MOTOR_SPEED_MULTIPLIER = 1.02;         // In case one motor is slower than the other, only applies to the left motor when moving fowards
+const double BW_MOTOR_SPEED_MULTIPLIER = 1.008;         // In case one motor is slower than the other, only applies to the left motor when moving backwards
 
-const double MOTOR_SPEED = 100.0;         // Base speed of both motors (DEPRECATED)
+const double MOTOR_SPEED = 100.0;         // Base speed of both motors
 
 const double TURN_TOLERANCE = 5.0;          // The maximum difference between the target heading and heading before completing a turn
 
@@ -23,7 +35,7 @@ const double TURN_TIME_RIGHT = 1200.0;
 
 boolean TOGGLE_SLOW_TURN = false;
 boolean TOGGLE_PID = false;
-boolean TOGGLE_TIME_TURN = true;
+boolean TOGGLE_TIME_TURN = false;
 boolean TOGGLE_TIME_MOVE = false;
 
 // ---------------   Arduino Pins   ---------------
@@ -32,28 +44,28 @@ boolean TOGGLE_TIME_MOVE = false;
 const int BUTTON_PIN = 11;
 
 // Motor Controller
-const int STBY = 7;
+const int STBY = 7; // White
 // Left Motor
-const int PWMA = 4;
-const int AIN2 = 5;
-const int AIN1 = 6;
+const int PWMA = 4; // Blue
+const int AIN2 = 5; // Green
+const int AIN1 = 6; // Yellow
 // Right Motor
-const int BIN1 = 8;
-const int BIN2 = 9;
-const int PWMB = 10;
+const int BIN1 = 8; // Yellow
+const int BIN2 = 9; // Green
+const int PWMB = 10; // Blue
 
 // Left Encoder
-const int ENCODER_LEFT_PIN_A = 12;
-const int ENCODER_LEFT_PIN_B = 2;
+const int ENCODER_LEFT_PIN_A = 44; // Yellow
+const int ENCODER_LEFT_PIN_B = 3; // White
 // Right Encoder
-const int ENCODER_RIGHT_PIN_A = 13;
-const int ENCODER_RIGHT_PIN_B = 3;
+const int ENCODER_RIGHT_PIN_A = 46; // Yellow
+const int ENCODER_RIGHT_PIN_B = 2; // White
 
 // ---------------   Motor Setup   ---------------
 
 // Motor Controller
 Motor motorLeft(AIN1, AIN2, PWMA, 1, STBY);
-Motor motorRight(BIN1, BIN2, PWMB, 1, STBY);
+Motor motorRight(BIN2, BIN1, PWMB, 1, STBY);
 
 // Encoders
 long encoderEnd; // Variable to hold the amount of encoder pulses to reach the target
@@ -70,17 +82,24 @@ int encoderRightLastState;
 
 // Variables
 double compass = 0.0;         // Actual reading of the compass module
-double heading = 0.0;         // The current heading (approaches the value of trueHeading)
-double trueHeading = 0.0;       // The current heading (accumulative)
+double heading = 0.0;         // The current heading 
 int direction_flag = 0;          // Tracks which region the heading currently is in order to track when heading wraps from 0 to 360
 int revolutions = 0;            // Revolutions
 double targetHeading = 0.0;       // Heading to align with (for moving and turning)
 
 // ---------------       PID       ---------------
 
+// Alignment
 double motorSpeedOffset = 0;
 double Kp = 1.0, Ki = 0, Kd = 0.0;
 PID alignPID(&targetHeading, &motorSpeedOffset, &heading, Kp, Ki, Kd, DIRECT);
+
+// Time
+double optimal_cm_per_second; 
+double motorSpeedOffsetOnTime = 0;
+double optimalDistance = 0.0;
+double actualDistance = 0.0;
+PID timePID(&optimalDistance, &motorSpeedOffset, &actualDistance, Kp, Ki, Kd, DIRECT);
 
 // ---------------  Miscellaneous  ---------------
 
@@ -108,6 +127,7 @@ void setup(){
 
   // Start debug serial
   Serial.begin(115200);
+  
 	Wire.begin();
 
   // Initialize start button pin as an input
@@ -118,14 +138,18 @@ void setup(){
   encoderRightPulses = 0.0;
   encodersInit();
 
-  // Initialize compass
+  // Initialize compass (Unused)
+  /*
   JY901.StartIIC();
-
-  //Serial.println("Compass ready");
+  Serial.println("Compass ready");
+  */
 
   // Initialize PID
   alignPID.SetOutputLimits(-MOTOR_SPEED_MAX, 240-MOTOR_SPEED_MAX);
   alignPID.SetSampleTime(100);
+
+  timePID.SetOutputLimits(-MOTOR_SPEED_MAX, 240-MOTOR_SPEED_MAX);
+  timePID.SetSampleTime(100);
 
   //
   
@@ -133,11 +157,14 @@ void setup(){
 
 void loop(){
 
+  beginPath = false;
+
   // Read the state of the start button
   buttonState = digitalRead(BUTTON_PIN); 
 
   // Determine if the start button has been press (HIGH means the button is being pressed)
   if (buttonState == HIGH && lastButtonState == LOW){
+    
 
     // Give time to take finger off of the button
     delay(1440); 
@@ -156,83 +183,9 @@ void loop(){
     moveDistance(20.0);
 
     // ---------------  Create Path Here  ---------------
-	/*
-    fw();
-    right();
-    fw();
-    left();
-    fw();
-    left();
-    fw();
-    bw();
-    right();
-    bw();
-    right();
-    fw(3);
-    right();
-    fw();
-    bw();
-    left();
-    left();
-    fw(2);
-    left();
-    fw();
-    right();
-    right();
-    bw();
-    right();
-    fw(3);
-    right();
-    fw();
-    bw();
-    left();
-    left();
-    left();
-    fw(2);
-    right();
-    fw();
-	*/
     
+    fw();
 
-    
-    
-
-
-    /*
-    right();
-    fw();
-    left();
-    fw(3);
-    bw(2);
-    left();
-    fw(2);
-    bw();
-    right();
-    fw();
-    left();
-    fw();
-    right();
-    fw();
-    right();
-    fw();
-    bw();
-    left();
-    left();
-    fw(2);
-    bw();
-    left();
-    fw(3);
-    right();
-    bw();
-    fw(2);
-    right();
-    fw();
-    bw();
-    right();
-    fw();
-    right();
-    bw(2);
-    */
     // --------------------------------------------------
 
     // Move dowel to the ending location
@@ -247,6 +200,60 @@ void loop(){
   // Make sure your target heading is aligned wiht your initial heading
   targetHeading = heading;
   
+}
+
+// Path Calculations
+void calculatePathTime(){
+  int amount;
+  int linear_count = 0;
+  int right_rotation_count = 0;
+  int left_rotation_count = 0;
+  for (byte index = 0; index < sizeof(PATH); index += 2){
+    amount = PATH[index+1];
+    switch (PATH[index]) {
+      case 'f':
+        linear_count += amount;
+        break;
+      case 'b':
+        linear_count += amount;
+        break;
+      case 'r':
+        right_rotation_count += amount;
+        break;
+      case 'l':
+        left_rotation_count += amount;
+        break;
+      default:
+        Serial.print("Calculation Path Error: unknown movement function");
+        break;
+    }
+  }
+
+  optimal_cm_per_second = BLOCK_SIZE / ((TARGET_TIME - (left_rotation_count*TURN_TIME_LEFT) - (right_rotation_count*TURN_TIME_RIGHT)) / linear_count);
+}
+
+void runPath(){
+  int amount;
+  for (byte index = 0; index < sizeof(PATH); index += 2){
+    amount = PATH[index+1];
+    switch (PATH[index]) {
+      case 'f':
+        fw(amount);
+        break;
+      case 'b':
+        bw(amount);
+        break;
+      case 'r':
+        right();
+        break;
+      case 'l':
+        left();
+        break;
+      default:
+        Serial.print("Run Path Error: unknown movement function");
+        break;
+    }
+  }
 }
 
 // Primitives
@@ -282,6 +289,8 @@ void moveDistance(double distance){
   long initialTime = millis();
   long time = 0.0;
 
+  double left_motor_speed_multiplier;
+
   boolean accelerate = true;
 
   // PID
@@ -291,27 +300,18 @@ void moveDistance(double distance){
   int direction;
   if (distance >= 0){
     direction = 1; // Target is ahead
+    left_motor_speed_multiplier = FW_MOTOR_SPEED_MULTIPLIER;
   } else {
     direction = -1; // Target is behind
+    left_motor_speed_multiplier = BW_MOTOR_SPEED_MULTIPLIER;
   }
 
 
   while (avgPulses < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
-    // Wait
-    
-    /*
-    Serial.println("DELTA TIME: " + String(time));
-    Serial.println("AVG PULSE: " + String(avgPulses));
-    Serial.println("MOVE SPEED: " + String(moveSpeed));
-    Serial.println("DISTANCE FROM START: " + String(distanceFromStart));
-    Serial.println("ENCODER END: " + String(encoderEnd));
-    Serial.println("MIDPOINT SPEED: " + String(midpointSpeed));
-    */
-    
     
     time = millis() - initialTime;
 
-    avgPulses = abs((encoderLeftPulses + encoderRightPulses) / 2.0);
+    avgPulses = abs(encoderRightPulses);
     
     
     if (avgPulses < (abs(encoderEnd) / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
@@ -349,15 +349,11 @@ void moveDistance(double distance){
       motorSpeedOffset = 0.0;
     }
 
-
-    motorLeft.drive((motorSpeedOffset + moveSpeed) * MOTOR_SPEED_MULTIPLIER * direction);
+    
+    motorLeft.drive((motorSpeedOffset + moveSpeed) * left_motor_speed_multiplier * direction);
     motorRight.drive(moveSpeed * direction);
 
-    printDebugInfo();
-    
-    
-
-    
+    printDebugInfo();  
   }
 
   // Stop moving after target distance is reached
@@ -375,9 +371,9 @@ void turnDegrees(double degrees){
   // Determine direction of target angle (counterclockwise is positive)
   int direction;
   if (degrees >= 0){
-    direction = -1; // Turn to the left
+    direction = 1; // Turn to the left
   } else {
-    direction = 1; // Turn to the right
+    direction = -1; // Turn to the right
   }
 
   // Calculate the target heading in the determined direction
@@ -385,7 +381,7 @@ void turnDegrees(double degrees){
   
 
   // Tell motors to drive according to the direction of the angle
-  motorLeft.drive(MOTOR_SPEED * MOTOR_SPEED_MULTIPLIER * direction);
+  motorLeft.drive(MOTOR_SPEED * FW_MOTOR_SPEED_MULTIPLIER * direction);
   motorRight.drive(MOTOR_SPEED * -direction); // Moves the opposite direction in order to turn
 
   // Turn until the heading reaches the target heading
@@ -395,7 +391,6 @@ void turnDegrees(double degrees){
     } else {
       delay(TURN_TIME_LEFT);
     }
-    
   } else {
     while (direction * (heading - targetHeading) > TURN_TOLERANCE){
       readHeading();
@@ -416,6 +411,8 @@ void hitBrakes(){
 // Compass
 
 void readHeading(){
+  // Compass Unused
+  return;
   JY901.GetAngle();
   compass = 180 + ((double)JY901.stcAngle.Angle[2] / 32768 * 180);
   
@@ -453,9 +450,10 @@ void encodersInit() {
 
 void encoderLeftCounter() {
   int leftStateA = digitalRead(ENCODER_LEFT_PIN_A);
+  int leftStateB;
   if(encoderLeftLastState == LOW && leftStateA == HIGH)
   {
-    int leftStateB = digitalRead(ENCODER_LEFT_PIN_B);
+    leftStateB = digitalRead(ENCODER_LEFT_PIN_B);
 
     // Check for change in direction
     if (leftStateB == LOW && encoderLeftDirection)
@@ -499,7 +497,6 @@ void encoderRightCounter() {
 
 // Debug
 void printDebugInfo(){
-
   // Serial Studio
   Serial.println();
   Serial.print("/*");
