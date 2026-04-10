@@ -1,7 +1,6 @@
 #include <SparkFun_TB6612.h>
 #include <Wire.h>
 #include <PID_v1.h>
-#include "JY901.h"
 // ---------------    Parameters   ---------------
 
 // ~~~~~~~~~
@@ -18,11 +17,13 @@ const char PATH[] =
 const double BLOCK_SIZE = 50.0;          // Length of one grid square (in centimeters)
 const double ENCODER_PER_CENTIMETER = 38.60784314;          // Encoder pulses per 1 cm
 
-const double MOTOR_SPEED_MIN = 50.0;         // Starting and ending speed of both motors
-const double MOTOR_SPEED_MAX = 220.0;         // Maximum speed of both motors
+const double MOTOR_SPEED_MIN = 1.0;         // Starting and ending speed of both motors
+const double MOTOR_SPEED_MAX = 50.0;         // Maximum speed of both motors
 
 const double FW_MOTOR_SPEED_MULTIPLIER = 1.02;         // In case one motor is slower than the other, only applies to the left motor when moving fowards
 const double BW_MOTOR_SPEED_MULTIPLIER = 1.008;         // In case one motor is slower than the other, only applies to the left motor when moving backwards
+
+const double LEFT_MOTOR_SPEED_SHIFT = 0.29;
 
 const double MOTOR_SPEED = 100.0;         // Base speed of both motors
 
@@ -72,34 +73,37 @@ long encoderEnd; // Variable to hold the amount of encoder pulses to reach the t
 // Left Encoder
 boolean encoderLeftDirection;          // Tracks the direction of the left motor (TRUE is foward)
 long encoderLeftPulses;         // Tracks the amount of encoder pulses in the left motor
+long encoderLeftPulsesPrevious;          // Holds the amount of pulses in the left motor at the time of the last speed PID calculation
 int encoderLeftLastState;
 // Right Encoder
 boolean encoderRightDirection;         // Tracks the direction of the right motor (TRUE is foward)
-long encoderRightPulses;         // Tracks the amount of encoder pulses in the left motor
+long encoderRightPulses;         // Tracks the amount of encoder pulses in the right motor
+long encoderRightPulsesPrevious;          // Holds the amount of pulses in the right motor at the time of the last speed PID calculation
 int encoderRightLastState;
 
-// ---------------     Compass     ---------------
-
-// Variables
-double compass = 0.0;         // Actual reading of the compass module
-double heading = 0.0;         // The current heading 
-int direction_flag = 0;          // Tracks which region the heading currently is in order to track when heading wraps from 0 to 360
-int revolutions = 0;            // Revolutions
-double targetHeading = 0.0;       // Heading to align with (for moving and turning)
-
 // ---------------       PID       ---------------
+double Kp = 0.2, Ki = 5.0, Kd = 8.0;
+double optimalSpeed;
+double zero = 0.0;
 
-// Alignment
-double motorSpeedOffset = 0;
-double Kp = 1.0, Ki = 0, Kd = 0.0;
-PID alignPID(&targetHeading, &motorSpeedOffset, &heading, Kp, Ki, Kd, DIRECT);
+// Left Motor Speed Calibration PID
+long previousSpeedPIDMillis;          // Timestamp of the last speed PID calculation 
+double leftMotorOffset;
+double leftMotorCMPS;          // Centimeter Per Second
+PID leftSpeedPID(&zero, &leftMotorOffset, &leftMotorCMPS, Kp, Ki, Kd, DIRECT);
+
+// Right Motor Speed Calibration PID
+double rightMotorOffset;
+double rightMotorCMPS;          // Centimeter Per Second
+PID rightSpeedPID(&zero, &rightMotorOffset, &rightMotorCMPS, Kp, Ki, Kd, DIRECT);
 
 // Time
+
 double optimal_cm_per_second; 
 double motorSpeedOffsetOnTime = 0;
 double optimalDistance = 0.0;
 double actualDistance = 0.0;
-PID timePID(&optimalDistance, &motorSpeedOffset, &actualDistance, Kp, Ki, Kd, DIRECT);
+//PID timePID(&optimalDistance, &motorSpeedOffset, &actualDistance, Kp, Ki, Kd, DIRECT);
 
 // ---------------  Miscellaneous  ---------------
 
@@ -134,24 +138,14 @@ void setup(){
   pinMode(BUTTON_PIN, INPUT);
 
   // Initialize encoders
-  encoderLeftPulses = 0.0;
-  encoderRightPulses = 0.0;
+  clearEncoderCount();
   encodersInit();
 
-  // Initialize compass (Unused)
-  /*
-  JY901.StartIIC();
-  Serial.println("Compass ready");
-  */
-
   // Initialize PID
-  alignPID.SetOutputLimits(-MOTOR_SPEED_MAX, 240-MOTOR_SPEED_MAX);
-  alignPID.SetSampleTime(100);
-
-  timePID.SetOutputLimits(-MOTOR_SPEED_MAX, 240-MOTOR_SPEED_MAX);
-  timePID.SetSampleTime(100);
-
-  //
+  leftSpeedPID.SetMode(1);
+  rightSpeedPID.SetMode(1);
+  leftSpeedPID.SetOutputLimits(-250.0, 250.0);
+  rightSpeedPID.SetOutputLimits(-250.0, 250.0);
   
 }
 
@@ -177,14 +171,13 @@ void loop(){
   lastButtonState = buttonState;
 
   if (beginPath){
-   
     // Move into the first square
     
     moveDistance(20.0);
 
     // ---------------  Create Path Here  ---------------
-    
-    fw();
+  
+    right();
 
     // --------------------------------------------------
 
@@ -194,11 +187,10 @@ void loop(){
     // Stop running the path
     beginPath = false;
   }
-  readHeading();
+  
+  adjustMotorSpeed();
   printDebugInfo();
-
-  // Make sure your target heading is aligned wiht your initial heading
-  targetHeading = heading;
+  
   
 }
 
@@ -279,10 +271,11 @@ void right(){
 void moveDistance(double distance){
 
   // Set encoders
-  encoderEnd = distance * ENCODER_PER_CENTIMETER;
-  encoderLeftPulses = 0.0;
-  encoderRightPulses = 0.0;
-  long avgPulses = 0.0;
+  encoderEnd = abs(distance * ENCODER_PER_CENTIMETER);
+  
+  clearEncoderCount();
+
+  long averagePulses = 0.0;
   long distanceFromStart = 0.0;
   double midpointSpeed = 0.0;
 
@@ -291,10 +284,12 @@ void moveDistance(double distance){
 
   double left_motor_speed_multiplier;
 
+  optimalSpeed = 25.0;
+
   boolean accelerate = true;
 
-  // PID
-  alignPID.SetMode(1);
+  
+
 
   // Determine direction of target distance
   int direction;
@@ -307,58 +302,61 @@ void moveDistance(double distance){
   }
 
 
-  while (avgPulses < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
+  while (averagePulses < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
     
     time = millis() - initialTime;
 
-    avgPulses = abs(encoderRightPulses);
+    averagePulses = abs(encoderRightPulses);
     
-    
-    if (avgPulses < (abs(encoderEnd) / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
+    /*
+    if (averagePulses < (encoderEnd / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
       moveSpeed = constrain(
         MOTOR_SPEED_MIN + ((MOTOR_SPEED_MAX - MOTOR_SPEED_MIN) * time * 0.001),
         MOTOR_SPEED_MIN,
         MOTOR_SPEED_MAX
       );
-      //Serial.println("STATE: ACCEL");
-      distanceFromStart = avgPulses;
-    } else if (avgPulses > (abs(encoderEnd) - distanceFromStart) && !accelerate){
+      distanceFromStart = averagePulses;
+    } else if (averagePulses > (encoderEnd - distanceFromStart) && !accelerate){
       moveSpeed = constrain(
         midpointSpeed - ((midpointSpeed - 0.0) * time * 0.001),
         MOTOR_SPEED_MIN,
         MOTOR_SPEED_MAX
       );
-      //Serial.println("STATE: DECCEL");
     } else {
       initialTime = millis();
       midpointSpeed = moveSpeed;
       accelerate = false;
-      //Serial.println("STATE: COAST");
     }
-    
-    
-    readHeading();
-    if (TOGGLE_PID){
-      alignPID.Compute();
+    */
+
+    if (averagePulses < (encoderEnd/2.0)){
+      moveSpeed = MOTOR_SPEED_MAX;
     } else {
-      motorSpeedOffset = 0.0;
+      moveSpeed = MOTOR_SPEED_MIN;
     }
+    
+    
+    
+
 
     if (TOGGLE_TIME_MOVE){
       moveSpeed = MOTOR_SPEED;
-      motorSpeedOffset = 0.0;
+      leftMotorOffset = 0.0;
+      rightMotorOffset = 0.0;
+    } else {
+      adjustMotorSpeed();
     }
-
+    optimalSpeed = moveSpeed;
     
-    motorLeft.drive((motorSpeedOffset + moveSpeed) * left_motor_speed_multiplier * direction);
-    motorRight.drive(moveSpeed * direction);
 
-    printDebugInfo();  
+    motorLeft.drive((leftMotorOffset) * direction);
+    motorRight.drive((rightMotorOffset) * direction);
+
+    printDebugInfo();
   }
 
   // Stop moving after target distance is reached
   hitBrakes();
-  alignPID.SetMode(0);
 
   delay(200);
 
@@ -366,36 +364,28 @@ void moveDistance(double distance){
 
 void turnDegrees(double degrees){
   // Update the heading to the current compass reading
-  readHeading();
+  
 
   // Determine direction of target angle (counterclockwise is positive)
   int direction;
   if (degrees >= 0){
-    direction = 1; // Turn to the left
-  } else {
     direction = -1; // Turn to the right
+    encoderEnd = ((3.14159*14.3)/2.0)*ENCODER_PER_CENTIMETER;
+  } else {
+    direction = 1; // Turn to the left
+    encoderEnd = ((3.14159*14.2)/2.0)*ENCODER_PER_CENTIMETER;
   }
 
-  // Calculate the target heading in the determined direction
-  targetHeading = targetHeading + degrees;
+  optimalSpeed = 10;
+
   
 
-  // Tell motors to drive according to the direction of the angle
-  motorLeft.drive(MOTOR_SPEED * FW_MOTOR_SPEED_MULTIPLIER * direction);
-  motorRight.drive(MOTOR_SPEED * -direction); // Moves the opposite direction in order to turn
+  clearEncoderCount();
 
-  // Turn until the heading reaches the target heading
-  if (TOGGLE_TIME_TURN){
-    if (direction == 1){
-      delay(TURN_TIME_RIGHT);
-    } else {
-      delay(TURN_TIME_LEFT);
-    }
-  } else {
-    while (direction * (heading - targetHeading) > TURN_TOLERANCE){
-      readHeading();
-      printDebugInfo();
-    }
+  while (abs(encoderRightPulses) < encoderEnd){
+    adjustMotorSpeed();
+    motorLeft.drive(leftMotorOffset * direction);
+    motorRight.drive(rightMotorOffset * -direction); // Moves the opposite direction in order to turn
   }
 
   // Stop moving after reaching target angle
@@ -408,31 +398,47 @@ void hitBrakes(){
   brake(motorLeft,motorRight);
 }
 
-// Compass
+// Movement Calculations
 
-void readHeading(){
-  // Compass Unused
-  return;
-  JY901.GetAngle();
-  compass = 180 + ((double)JY901.stcAngle.Angle[2] / 32768 * 180);
+void clearEncoderCount(){
+  leftSpeedPID.SetOutputLimits(0.0, 1.0);
+  rightSpeedPID.SetOutputLimits(0.0, 1.0);
+  leftSpeedPID.Compute();
+  rightSpeedPID.Compute();
+  leftSpeedPID.SetOutputLimits(-200.0, 200.0);
+  rightSpeedPID.SetOutputLimits(-200.0, 200.0);
+  encoderLeftPulses = 0.0;
+  encoderRightPulses = 0.0;
+  encoderLeftPulsesPrevious = 0.0;
+  encoderRightPulsesPrevious = 0.0;
+  previousSpeedPIDMillis = 0.0;
+}
+
+void adjustMotorSpeed(){
   
-  if (direction_flag == 1 && compass < 180.0){
-    revolutions += 1;
-    direction_flag = 0;
-  } else if (direction_flag == -1 && compass > 180){
-    revolutions -= 1;
-    direction_flag = 0;
-  }
-  if ((compass < 100.0)){
-    direction_flag = -1;
-  } else if ((compass > 260.0)){
-    direction_flag = 1;
-  } else {
-    direction_flag = 0;
-  }
+  // Make sure there is a previous position to compare to
+  if (true) {
+    double deltaTime = (double) (millis() - previousSpeedPIDMillis);
 
-  // Calculates the true accumulative heading
-  heading = (revolutions * 360) + compass; 
+    // Stop calculation if last calculation happened too recently
+    if (deltaTime < 10.0) {
+      return;
+    }
+    Serial.println(optimalSpeed);
+
+    double deltaPoisitionLeft = (encoderLeftPulses - encoderLeftPulsesPrevious) / ENCODER_PER_CENTIMETER;
+    double deltaPoisitionRight = (encoderRightPulses - encoderRightPulsesPrevious) / ENCODER_PER_CENTIMETER;
+
+    leftMotorCMPS = optimalSpeed + LEFT_MOTOR_SPEED_SHIFT - abs(deltaPoisitionLeft / (deltaTime / 1000.0));
+    rightMotorCMPS = optimalSpeed - abs(deltaPoisitionRight / (deltaTime / 1000.0));
+
+    leftSpeedPID.Compute();
+    rightSpeedPID.Compute();
+  }
+  encoderLeftPulsesPrevious = encoderLeftPulses;
+  encoderRightPulsesPrevious = encoderRightPulses;
+  previousSpeedPIDMillis = millis();
+  
 }
 
 // Encoder Functions
@@ -500,21 +506,21 @@ void printDebugInfo(){
   // Serial Studio
   Serial.println();
   Serial.print("/*");
-  Serial.print(compass);
-  Serial.print(",");
-  Serial.print(heading);
-  Serial.print(",");
-  Serial.print(targetHeading);
-  Serial.print(",");
   Serial.print(encoderEnd);
-  Serial.print(",");
+  Serial.print(", ");
   Serial.print(encoderLeftPulses);
-  Serial.print(",");
+  Serial.print(", ");
   Serial.print(encoderRightPulses);
-  Serial.print(",");
-  Serial.print(revolutions);
-  Serial.print(",");
-  Serial.print(motorSpeedOffset);
+  Serial.print(", ");
+  Serial.print(leftMotorCMPS);
+  Serial.print(", ");
+  Serial.print(rightMotorCMPS);
+  Serial.print(", ");
+  Serial.print(leftMotorOffset);
+  Serial.print(", ");
+  Serial.print(rightMotorOffset);
+  Serial.print(", ");
+  Serial.print(optimalSpeed);
   Serial.print("*/");
   
 }
