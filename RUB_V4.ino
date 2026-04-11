@@ -21,23 +21,27 @@ const double MOTOR_SPEED_MIN = 1.0;         // Starting and ending speed of both
 const double MOTOR_SPEED_MAX = 50.0;         // Maximum speed of both motors
 
 const double FW_MOTOR_SPEED_MULTIPLIER = 1.02;         // In case one motor is slower than the other, only applies to the left motor when moving fowards
-const double BW_MOTOR_SPEED_MULTIPLIER = 1.008;         // In case one motor is slower than the other, only applies to the left motor when moving backwards
+const double BW_MOTOR_SPEED_MULTIPLIER = 0.998;         // In case one motor is slower than the other, only applies to the left motor when moving backwards
 
-const double LEFT_MOTOR_SPEED_SHIFT = 0.29;
-
-const double MOTOR_SPEED = 100.0;         // Base speed of both motors
+const double BASE_LEFT_MOTOR_SPEED_SHIFT = 0.29;
 
 const double TURN_TOLERANCE = 5.0;          // The maximum difference between the target heading and heading before completing a turn
 
-const double TURN_TIME_LEFT = 1190.0;
-const double TURN_TIME_RIGHT = 1200.0;
+const double MOTOR_SPEED = 220.0;         // Base speed of both motors
+const double TURN_TIME_LEFT = 1445.0;
+const double TURN_TIME_RIGHT = 1470.0;
+const double MOVE_TIME = 300.0;
 
 // ---------------     Settings     ---------------
 
 boolean TOGGLE_SLOW_TURN = false;
-boolean TOGGLE_PID = false;
 boolean TOGGLE_TIME_TURN = false;
 boolean TOGGLE_TIME_MOVE = false;
+boolean TOGGLE_DOWEL_ALIGNMENT = true;
+//boolean TOGGLE_PID = false;
+
+
+
 
 // ---------------   Arduino Pins   ---------------
 
@@ -85,6 +89,7 @@ int encoderRightLastState;
 double Kp = 0.2, Ki = 5.0, Kd = 8.0;
 double optimalSpeed;
 double zero = 0.0;
+double leftMotorSpeedShift;
 
 // Left Motor Speed Calibration PID
 long previousSpeedPIDMillis;          // Timestamp of the last speed PID calculation 
@@ -172,17 +177,67 @@ void loop(){
 
   if (beginPath){
     // Move into the first square
+    if (TOGGLE_DOWEL_ALIGNMENT){
+      if (TOGGLE_TIME_MOVE){
+        motorLeft.drive(FW_MOTOR_SPEED_MULTIPLIER * 125);
+        motorRight.drive(125, 900);
+        motorLeft.brake();
+        motorRight.brake();
+        delay(500);
+      } else {
+        moveDistance(20.0);
+      }
+    }
     
-    moveDistance(20.0);
 
     // ---------------  Create Path Here  ---------------
   
     right();
+    fw();
+    left();
+    fw();
+    right();
+    fw();
+    right();
+    fw();
+    bw();
+    bw();
+    right();
+    fw();
+    fw();
+    fw();
+    fw();
+    left();
+    fw();
+    left();
+    fw();
+    right();
+    fw();
+    bw();
+    left();
+    fw();
+    fw();
+    fw();
+    left();
+    fw();
+    left();
+    fw();
 
     // --------------------------------------------------
 
     // Move dowel to the ending location
-    moveDistance(5.0);
+    if (TOGGLE_DOWEL_ALIGNMENT){
+      if (TOGGLE_TIME_MOVE){
+        motorLeft.drive(FW_MOTOR_SPEED_MULTIPLIER * 115);
+        motorRight.drive(115, 350);
+        motorLeft.brake();
+        motorRight.brake();
+        delay(500);
+      } else {
+        moveDistance(5.0);
+      }
+    }
+    
 
     // Stop running the path
     beginPath = false;
@@ -259,11 +314,11 @@ void bw(double blocks){
 }
 
 void left(){
-  turnDegrees(90.0);
+  turnDegrees(-90.0);
 }
 
 void right(){
-  turnDegrees(-90.0);
+  turnDegrees(90.0);
 }
 
 // Movement Functions
@@ -302,32 +357,57 @@ void moveDistance(double distance){
   }
 
 
+  // ~~~~~~ TIME MOVE
+  if (TOGGLE_TIME_MOVE && distance > 0) {
+
+    for (int i = 80; i <= MOTOR_SPEED; i++) {
+      motorLeft.drive(FW_MOTOR_SPEED_MULTIPLIER * i);
+      motorRight.drive(i);
+      delay(4);
+    }
+
+    delay(MOVE_TIME);
+
+    for (int i = MOTOR_SPEED; i >= 50; i--) {
+      motorLeft.drive(FW_MOTOR_SPEED_MULTIPLIER * i);
+      motorRight.drive(i);
+      delay(4);
+    }
+    motorLeft.brake();
+    motorRight.brake();
+
+    delay(200);
+    return;
+
+  } else if (TOGGLE_TIME_MOVE && distance < 0) {
+
+    for (int i = -50; i >= -MOTOR_SPEED; i--) {
+      motorLeft.drive(BW_MOTOR_SPEED_MULTIPLIER * i);
+      motorRight.drive(i);
+      delay(4);
+    }
+
+    delay(MOVE_TIME);
+
+    for (int i = -MOTOR_SPEED; i <= -80; i++) {
+      motorLeft.drive(BW_MOTOR_SPEED_MULTIPLIER * i);
+      motorRight.drive(i);
+      delay(4);
+    }
+    motorLeft.brake();
+    motorRight.brake();
+
+    delay(200);
+    return;
+
+  }
+  // ~~~~~~
+
   while (averagePulses < abs(encoderEnd)){ // Wait for the encoders to count to the target pulse count
     
     time = millis() - initialTime;
 
     averagePulses = abs(encoderRightPulses);
-    
-    /*
-    if (averagePulses < (encoderEnd / 2.0) && moveSpeed < MOTOR_SPEED_MAX){
-      moveSpeed = constrain(
-        MOTOR_SPEED_MIN + ((MOTOR_SPEED_MAX - MOTOR_SPEED_MIN) * time * 0.001),
-        MOTOR_SPEED_MIN,
-        MOTOR_SPEED_MAX
-      );
-      distanceFromStart = averagePulses;
-    } else if (averagePulses > (encoderEnd - distanceFromStart) && !accelerate){
-      moveSpeed = constrain(
-        midpointSpeed - ((midpointSpeed - 0.0) * time * 0.001),
-        MOTOR_SPEED_MIN,
-        MOTOR_SPEED_MAX
-      );
-    } else {
-      initialTime = millis();
-      midpointSpeed = moveSpeed;
-      accelerate = false;
-    }
-    */
 
     if (averagePulses < (encoderEnd/2.0)){
       moveSpeed = MOTOR_SPEED_MAX;
@@ -339,13 +419,8 @@ void moveDistance(double distance){
     
 
 
-    if (TOGGLE_TIME_MOVE){
-      moveSpeed = MOTOR_SPEED;
-      leftMotorOffset = 0.0;
-      rightMotorOffset = 0.0;
-    } else {
-      adjustMotorSpeed();
-    }
+    leftMotorSpeedShift = BASE_LEFT_MOTOR_SPEED_SHIFT;
+    adjustMotorSpeed();
     optimalSpeed = moveSpeed;
     
 
@@ -369,20 +444,33 @@ void turnDegrees(double degrees){
   // Determine direction of target angle (counterclockwise is positive)
   int direction;
   if (degrees >= 0){
-    direction = -1; // Turn to the right
-    encoderEnd = ((3.14159*14.3)/2.0)*ENCODER_PER_CENTIMETER;
+    direction = 1; // Turn to the right
+    encoderEnd = ((3.14159*15.0)/2.0)*ENCODER_PER_CENTIMETER; // 14.3
   } else {
-    direction = 1; // Turn to the left
-    encoderEnd = ((3.14159*14.2)/2.0)*ENCODER_PER_CENTIMETER;
+    direction = -1; // Turn to the left
+    encoderEnd = ((3.14159*15.0)/2.0)*ENCODER_PER_CENTIMETER; // 14.2
+  }
+
+  if (TOGGLE_TIME_TURN){
+    motorLeft.drive(0.363636 * MOTOR_SPEED * FW_MOTOR_SPEED_MULTIPLIER * direction);
+    motorRight.drive(0.363636 * MOTOR_SPEED * -direction); // Moves the opposite direction in order to turn
+    if (direction == 1){
+      delay(TURN_TIME_RIGHT);
+    } else {
+      delay(TURN_TIME_LEFT);
+    }
+    delay(200);
+    return;
   }
 
   optimalSpeed = 10;
+  leftMotorSpeedShift = 0.0;
 
   
 
   clearEncoderCount();
 
-  while (abs(encoderRightPulses) < encoderEnd){
+  while (abs(encoderRightPulses) < encoderEnd && abs(encoderLeftPulses) < encoderEnd){
     adjustMotorSpeed();
     motorLeft.drive(leftMotorOffset * direction);
     motorRight.drive(rightMotorOffset * -direction); // Moves the opposite direction in order to turn
@@ -393,6 +481,7 @@ void turnDegrees(double degrees){
 
   delay(200);
 }
+
 
 void hitBrakes(){
   brake(motorLeft,motorRight);
@@ -429,7 +518,7 @@ void adjustMotorSpeed(){
     double deltaPoisitionLeft = (encoderLeftPulses - encoderLeftPulsesPrevious) / ENCODER_PER_CENTIMETER;
     double deltaPoisitionRight = (encoderRightPulses - encoderRightPulsesPrevious) / ENCODER_PER_CENTIMETER;
 
-    leftMotorCMPS = optimalSpeed + LEFT_MOTOR_SPEED_SHIFT - abs(deltaPoisitionLeft / (deltaTime / 1000.0));
+    leftMotorCMPS = optimalSpeed + leftMotorSpeedShift - abs(deltaPoisitionLeft / (deltaTime / 1000.0));
     rightMotorCMPS = optimalSpeed - abs(deltaPoisitionRight / (deltaTime / 1000.0));
 
     leftSpeedPID.Compute();
